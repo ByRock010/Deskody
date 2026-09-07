@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Deskody Bridge",
+  "version": "0.1.6",
+  "description": "Connect active tabs and YouTube Music to your local Deskody app.",
+  "permissions": ["tabs", "storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1:43827/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Deskody settings"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://music.youtube.com/*"],
+      "js": ["music-page.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://music.youtube.com/*"],
+      "js": ["music.js"]
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["heartbeat.js"]
+    }
+  ]
+}

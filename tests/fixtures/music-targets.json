@@ -1,0 +1,22 @@
+{
+  "valid": [
+    {"input":"https://music.youtube.com/watch?v=LkoXilp7FPY&list=PLDRwTTP8arJ9NSwCujKB7dYA_2fVCNnDg","output":"https://music.youtube.com/watch?v=LkoXilp7FPY&list=PLDRwTTP8arJ9NSwCujKB7dYA_2fVCNnDg"},
+    {"input":"https://music.youtube.com/playlist?list=PLDRwTTP8arJ9NSwCujKB7dYA_2fVCNnDg&si=private#fragment","output":"https://music.youtube.com/playlist?list=PLDRwTTP8arJ9NSwCujKB7dYA_2fVCNnDg"},
+    {"input":"https://music.youtube.com/watch?start_radio=1&v=LkoXilp7FPY&list=RDAMVMLkoXilp7FPY","output":"https://music.youtube.com/watch?v=LkoXilp7FPY&list=RDAMVMLkoXilp7FPY&start_radio=1"},
+    {"input":"https://music.youtube.com/watch?v=LkoXilp7FPY&list=RDCLAK5uy_mix-example&index=2&params=wAEB","output":"https://music.youtube.com/watch?v=LkoXilp7FPY&list=RDCLAK5uy_mix-example&index=2&params=wAEB"},
+    {"input":"https://music.youtube.com/watch?v=LkoXilp7FPY","output":"https://music.youtube.com/watch?v=LkoXilp7FPY"}
+  ],
+  "invalid": [
+    "https://music.youtube.com.evil.test/watch?v=LkoXilp7FPY",
+    "https://user:pass@music.youtube.com/watch?v=LkoXilp7FPY",
+    "http://music.youtube.com/watch?v=LkoXilp7FPY",
+    "https://music.youtube.com:444/watch?v=LkoXilp7FPY",
+    "https://music.youtube.com/watch?v=bad",
+    "https://music.youtube.com/watch?list=PLexample",
+    "https://music.youtube.com/watch?v=LkoXilp7FPY&v=aaaaaaaaaaa",
+    "https://music.youtube.com/playlist?list=PLexample&list=PLother",
+    "https://music.youtube.com/playlist?list=javascript%3Aevil",
+    "https://music.youtube.com/search?q=song",
+    "javascript:alert(1)"
+  ]
+}

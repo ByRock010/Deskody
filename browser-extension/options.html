@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Deskody · Eşleştirme</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <span class="label">DESKODY</span>
+      <h1>Müziğin, akışına bağlansın.</h1>
+      <p>
+        Masaüstü uygulamasında Ayarlar → Tarayıcı köprüsünü açın. Eşleştirme
+        anahtarını aşağıya yapıştırın.
+      </p>
+      <form>
+        <label for="token">Eşleştirme anahtarı</label
+        ><input
+          id="token"
+          type="password"
+          required
+          minlength="64"
+          maxlength="64"
+          autocomplete="off"
+          spellcheck="false"
+        /><button type="submit">Bağlantıyı kaydet</button>
+      </form>
+      <p id="status" role="status"></p>
+      <p class="note">
+        Yalnızca bu bilgisayardaki 127.0.0.1:43827 adresiyle iletişim kurulur.
+        Algılanan geçmiş, URL sorguları ve gizli sekmeler paylaşılmaz. Kurala
+        girdiğiniz müzik bağlantısının oynatma bilgileri kullanılır. YouTube
+        Music kontrolü için music.youtube.com sekmesini açık tutun.
+        Eşleştirdiğiniz tarayıcı profilini kullanın; aynı anda tek profil
+        desteklenir.
+      </p>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

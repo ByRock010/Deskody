@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>NSAppleEventsUsageDescription</key><string>Deskody controls your selected music player and reads the active browser tab to apply your rules.</string>
+<key>NSAccessibilityUsageDescription</key><string>Deskody reads the active window title and document to detect your work context.</string>
+</dict></plist>

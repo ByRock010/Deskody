@@ -1,0 +1,55 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #ecf1e7;
+  background: #101512;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 520px;
+  margin: 10vh auto;
+  padding: 32px;
+}
+.label {
+  color: #c1ed98;
+  font-size: 12px;
+  letter-spacing: 3px;
+}
+h1 {
+  font-size: 36px;
+  letter-spacing: -1.5px;
+}
+p {
+  color: #a0ada4;
+  line-height: 1.7;
+}
+label {
+  display: block;
+  margin: 28px 0 10px;
+}
+input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #3e4e40;
+  border-radius: 10px;
+  background: #1a231c;
+  color: white;
+}
+button {
+  margin-top: 16px;
+  background: #c1ed98;
+  border: 0;
+  border-radius: 10px;
+  padding: 13px 22px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.note {
+  font-size: 12px;
+  margin-top: 40px;
+}
+#status {
+  color: #c1ed98;
+}
