@@ -1,6 +1,6 @@
 [package]
 name = "deskody"
-version = "0.1.8"
+version = "0.1.9"
 description = "Context-aware, local-first music automation"
 authors = ["Deskody"]
 edition = "2021"
@@ -24,7 +24,7 @@ tauri-build = { version = "2", features = [] }
 cc = "1"
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "image-png"], optional = true }
+tauri = { version = "~2.11", features = ["tray-icon", "image-png"], optional = true }
 tauri-plugin-single-instance = { version = "2", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

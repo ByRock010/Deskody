@@ -131,6 +131,8 @@ Deskody ön plandayken son dış uygulamanın bağlamı korunur; rekabet eden se
 
 ## AppKit panel barındırıcısı (0.1.8)
 
+Bu yol 0.1.9’da aşağıdaki NSMenu entegrasyonuyla değiştirilmiştir; önceki sürümün gerekçesi ve testleri için burada tutulur.
+
 Kök neden: Tao 0.35.3 `set_focus`, `makeKeyAndOrderFront` sonrasında `activateIgnoringOtherApps:YES` çağırır. Tauri’nin normal NSWindow’ını aktive etmek başka uygulamanın tam ekran Space’inden Deskody’nin masaüstüne geçişe yol açabilir. `visibleOnAllWorkspaces` tam ekran uyumluluğunu tek başına sağlamaz.
 
 `native/panel.m` yeni bir `DeskodyQuickPanel : NSPanel` oluşturur. `NSWindowStyleMaskNonactivatingPanel` oluşturulurken verilir; Objective-C class swizzling veya özel WindowServer API kullanılmaz. Ana pencere olamaz, klavye için key olabilir. `CanJoinAllSpaces | FullScreenAuxiliary | Transient | IgnoresCycle`, macOS 13+ üzerinde `CanJoinAllApplications` kullanır; birbiriyle çelişen primary/auxiliary/fullScreenNone bitleri eklenmez. `NSStatusWindowLevel` ve `hidesOnDeactivate = NO` diğer uygulamanın üstünde görünmesini sağlar.
@@ -140,3 +142,13 @@ Mevcut Tauri `tray-panel` NSWindow gizli ve kayıtlı kalır. Content view, içi
 Konumlandırma `NSEvent.mouseLocation` ve `NSScreen.visibleFrame` kullanarak AppKit mantıksal koordinatlarında yapılır; böylece farklı ölçekli monitörler arasında yanlış fiziksel koordinat dönüşümü yapılmaz. Menü çubuğunun altına, ekran sınırlarına sığacak boyutta açılır. Panelin kendisi `makeKeyAndOrderFront` kullanır; NSApplication aktivasyonu yapılmaz. Gerçek WKWebView first responder olur; diğer uygulama frontmost kalır.
 
 Panel görünürken yerel mouse/ESC ve global **yalnızca mouse** izleyicileri kurulur. Global klavye izleme/Accessibility izni istenmez. Dış tıklama, key kaybı, uygulama/Space/ekran değişimi ve uyku paneli gizler. İzleyiciler her gizlemede kaldırılır. 250 ms koruma dış tıklamayla kapanmanın ardından tray mouse-up ile yeniden açılmayı önler. Eşleştirme/medya/kural motoru protokolü değişmez.
+
+## Yerel status menüsü (0.1.9)
+
+`native/menu.m`, Tauri tray nesnesinin `with_inner_tray_icon` / `ns_status_item` erişimiyle alınan gerçek NSStatusItem’a NSMenu bağlar. Tauri sürümü bu iç API kullanımı nedeniyle `~2.11` aralığına sabitlenir. Sol tıklama AppKit’in normal menü açma yolunu kullanır; uygulama aktivasyonu, ayrı popup pencere, menü çubuğunu taklit eden çizim veya global kullanıcı ayarı değişikliği yoktur. NSMenu’nün kendi arka planı ve sistem appearance’ı korunur. Custom NSMenuItem.view yalnızca semantik sistem renkli AppKit etiket/anahtar/düğme/kaydırma kontrolleri içerir; arka plan boyamaz. SF Symbols ve NSSwitch doğrudan AppKit’tendir. Global olay izleyicisi ve yeni gizlilik izni gerekmez.
+
+Menü komutları native callback üzerinden `Service::quick_change` ve `Service::media` çağırır. Kural kimliği ve anahtar durumu kuyruğa alınır; tam eski Settings kopyası yazılmaz. Worker commit snapshot’ını JSON olarak `deskody_menu_snapshot` üzerinden thread-safe Foundation deposuna yayınlar. Action sonucu `deskody_menu_result` ile iletilir. Menüde async hata olursa anahtar commit edilmiş değere döner; işlem sürerken diğer değiştirici kontroller devre dışıdır, aç/çıkış erişilebilir kalır.
+
+AppKit menüleri iç içe `NSEventTrackingRunLoopMode` çalıştırdığı için durum güncellemeleri normal Tauri event loop’una bağımlı değildir. Menü açıkken 120 ms NSTimer yalnızca en son native snapshot/sonucu uygular; menü kapanınca timer kaldırılır. UI AppKit ana thread’inde güncellenir. Yapı menü açılmadan önce kurulur; açık menüde kural anahtarları yeniden oluşturulmaz. Kural listesi maksimum 240 pt yükseklikte kayar. NSMenuItem.view boyutu yalnızca gerçekten değiştiğinde güncellenir; aksi halde menü güncelleme/yeniden yerleştirme döngüsü oluşabilir.
+
+`tray-panel` config’i `create:false` olur: Windows/Linux setup onu elle oluşturur; macOS yalnızca ana webview ve yerel menüyü tutar. UI ana pencere IPC/event sözleşmesi ve tarayıcı eklentisi değişmez. Kapanışta native menü iptal edilir, timer kaldırılır ve NSStatusItem önceki menüsüne döndürülür.

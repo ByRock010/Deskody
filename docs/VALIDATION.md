@@ -89,6 +89,15 @@ Spotify OAuth canlı hesap, Premium/Developer uygulama erişimi, macOS kullanıc
 
 ## Üretilen dosyalar
 
+### 0.1.9 macOS sistem menüsü
+
+- `/Applications/Deskody.app` 0.1.9 olarak kuruldu ve tek çalışan örnek doğrulandı. Ayar/eşleştirme dosyalarının hash’leri değişmedi. Önceki uygulama `.tools/installed-backups/20260907-143643/` altında. App imzası ve `hdiutil verify` başarılı; `Deskody_0.1.9_aarch64.dmg` SHA-256: `b61f2a483538fd45d10a46adfda6a2b2f10e2a31c4677a161be7be978079645b`.
+- Windows `x86_64-pc-windows-gnu` için **varsayılan desktop feature açıkken tam `cargo check --offline` başarılı**: Tauri/WebView2/tray ve yeni koşullu panel oluşturma yolu dahil. Bu makinedeki yerel Rust sysroot, Zig C araçları ve gerçek x86_64 COFF üreten Zig RC komut adaptörü kullanıldı; kaynak derleme adımı atlanmadı. Windows üzerinde çalıştırma, `.exe` linkleme/kurulum ve fiziksel tray/medya davranışı bu kontrolde test edilmedi; mevcut Windows CI yapılandırması burada tetiklenmedi.
+- `python3 scripts/test-native-menu.py`: gerçek NSStatusItem/NSMenu, normal Space ve başka sürecin gerçek tam ekran Space’inde başarılı. Menü penceresinin görünürlüğü/aktif Space’i, sistem menü çubuğu görünürlüğü, status simgesinin native highlight durumu, dış uygulamanın frontmost kalması ve test sonunda hâlâ tam ekranda kalması doğrulandı.
+- Gerçek NSSwitch/NSButton `performClick` ile akış kapatma, kural kapatma, pause, async worker sonucu menü tracking loop’u içindeyken UI güncellenmesi, başarısız kayıtta anahtarın geri alınması/hata gösterimi ve Escape ile kapanma doğrulandı. Bu testte servis callback’i kontrollü fixture’dır; Rust worker’ın kalıcı kayıt davranışı 38 çekirdek testiyle ayrıca doğrulanır.
+- `npm run check`: TypeScript/Vite + 8 Vitest başarılı. macOS Clippy ve Objective-C derleme kontrolü başarılı. Test ekran görüntüleri `/tmp/deskody-native-menu.png` ve `/tmp/deskody-native-menu-fullscreen.png`: NSView cache görüntüsü metin/kontrol yerleşimini gösterir; WindowServer’ın cam arka plan kompozitini içermez. Cam, sistem renkleri ve saydamlık macOS’un gerçek NSMenu görünümüne bırakılır.
+- Kullanıcının Bluetooth/Control Center modülünün özel implementation’ı kopyalanmaz; public NSMenu/NSSwitch/SF Symbols kullanılır. Bu Mac’te native menü davranışı test edildi; tüm eski macOS sürümleri ve fiziksel çok monitör düzenleri ayrıca çalıştırılmadı.
+
 ### 0.1.8 yerel macOS paneli
 
 - `/Applications/Deskody.app` 0.1.8 olarak kuruldu, tek çalışan örnek doğrulandı. Önceki paket `.tools/installed-backups/20260907-141053/` altında. Ayar/eşleştirme dosyalarının hash’leri değişmedi. App imzası ve DMG checksum doğrulaması başarılı; DMG SHA-256: `ca4df441cb454dbd59c75ee9372a1b929e3665e8b82a44a2262a07526645a761`.

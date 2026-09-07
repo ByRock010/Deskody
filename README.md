@@ -174,7 +174,15 @@ Varsayılan yol işletim sisteminin uygulama ayar dizinidir (`dev.musicoptimizer
 Ayarlar geçici dosya + fsync + atomik değiştirme ile kaydedilir. Bozuk veya bilinmeyen sürümlü ayarlar otomatik olarak silinmez; otomasyon kapalı başlar ve hata görünür. Kullanıcı kaydettiğinde dosya yenilenir. En fazla 100 kural kabul edilir. Son 40 etkinlik yalnızca bellektedir; aktif pencere başlığı ve temizlenmiş URL diske yazılmaz. Spotify Web API kapalıyken uygulamanın buluta veri gönderen bir özelliği yoktur.
 
 
-### macOS tam ekran ve Spaces desteği (0.1.8)
+### macOS sistem menüsü (0.1.9)
+
+Deskody’nin macOS hızlı kontrolleri artık doğrudan `NSStatusItem` → `NSMenu` içinde sunulur. Menü arka planını, cam/saydamlık görünümünü, açık/koyu temayı, gölgeyi, simgenin seçili halini ve tam ekranda menü çubuğu davranışını macOS çizer ve yönetir. Yeşil uygulama teması bu menüde kullanılmaz. macOS 26 kendi güncel menü görünümünü, eski sürümler kendi yerel menü stilini kullanır.
+
+Akış ve kural anahtarları gerçek `NSSwitch`; simgeler SF Symbols, metinler sistem yazı tipi ve semantik sistem renkleridir. Kontroller menüyü kapatmadan çalışır. Oynat/duraklat, gerektiğinde otomasyona dönüş, hata gösterimi, ana uygulamayı açma, yenileme ve çıkış korunur. Kurallar uzunsa yerel kaydırma alanında listelenir. Menü açıkken başka uygulamaya/masaüstüne geçiş yaptırılmaz; ana pencere yalnızca açıkça seçildiğinde açılır. macOS’ta hızlı kontroller için webview oluşturulmaz; Windows/Linux React paneli devam eder.
+
+Yerel entegrasyon testi: `python3 scripts/test-native-menu.py`. Test kendi normal ve tam ekran pencerelerini kullanır, kullanıcı ayarlarına veya müziğine dokunmaz. [Apple’ın menü içinde özel görünümler belgesi](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/MenuList/Articles/ViewsInMenuItems.html) ve SDK `NSMenuItem.view` davranışı temel alınmıştır. 0.1.8’deki NSPanel barındırıcısı macOS üretim yolunda artık kullanılmaz.
+
+### macOS tam ekran ve Spaces desteği (0.1.8, önceki uygulama)
 
 Hızlı panel artık macOS’ta gerçek bir AppKit `NSPanel` içinde açılır. VS Code gibi başka bir uygulama tam ekrandayken veya farklı bir masaüstündeyken menü çubuğundaki Deskody simgesine tıklayabilirsiniz; panel o ekranda açılır ve Deskody’nin ana penceresine/masaüstüne geçiş yaptırmaz. Ana pencere yalnızca **Deskody’yi aç** ile getirilir. Menü çubuğu tam ekranda gizliyse imleci ekranın üstüne götürün.
 

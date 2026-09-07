@@ -7,9 +7,11 @@ use std::{
     sync::Mutex,
     time::{Duration, Instant},
 };
+#[cfg(not(target_os = "macos"))]
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    tray::TrayIconBuilder,
     Emitter, Manager, State,
 };
 
@@ -18,13 +20,88 @@ use tauri::{
 struct PanelState(Mutex<Option<Instant>>);
 
 #[cfg(target_os = "macos")]
-mod mac_panel {
-    use std::ffi::c_void;
+mod mac_menu {
+    use super::*;
+    use std::{
+        ffi::{c_char, c_void, CStr, CString},
+        sync::OnceLock,
+    };
+    static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
     unsafe extern "C" {
-        pub fn deskody_panel_create(window: *mut c_void) -> bool;
-        pub fn deskody_panel_toggle() -> bool;
-        pub fn deskody_panel_hide();
-        pub fn deskody_panel_destroy();
+        pub fn deskody_menu_create(
+            item: *mut c_void,
+            callback: unsafe extern "C" fn(*const c_char, *const c_char, bool),
+        ) -> bool;
+        pub fn deskody_menu_hide();
+        pub fn deskody_menu_destroy();
+        fn deskody_menu_snapshot(json: *const c_char);
+        fn deskody_menu_result(error: *const c_char);
+    }
+    pub fn initialize(app: &tauri::AppHandle) {
+        let _ = APP.set(app.clone());
+    }
+    pub fn publish(snapshot: &Snapshot) {
+        if let Some(json) = serde_json::to_string(snapshot)
+            .ok()
+            .and_then(|s| CString::new(s).ok())
+        {
+            unsafe {
+                deskody_menu_snapshot(json.as_ptr());
+            }
+        }
+    }
+    pub unsafe extern "C" fn action(action: *const c_char, rule: *const c_char, enabled: bool) {
+        if action.is_null() || rule.is_null() {
+            return;
+        }
+        let Some(app) = APP.get().cloned() else {
+            return;
+        };
+        // Native callback strings are valid for this call only; copy before spawning.
+        let action = unsafe { CStr::from_ptr(action) }
+            .to_string_lossy()
+            .into_owned();
+        let rule = unsafe { CStr::from_ptr(rule) }
+            .to_string_lossy()
+            .into_owned();
+        if action == "open" {
+            let handle = app.clone();
+            let _ = app.run_on_main_thread(move || show(&handle));
+            return;
+        }
+        if action == "refresh" {
+            app.state::<Service>().refresh();
+            return;
+        }
+        tauri::async_runtime::spawn(async move {
+            let service = app.state::<Service>();
+            if action == "quit" {
+                service.stop().await;
+                app.exit(0);
+                return;
+            }
+            let result = match action.as_str() {
+                "enabled" => service
+                    .quick_change(QuickChange::Enabled { enabled })
+                    .await
+                    .map(|_| ()),
+                "rule" => service
+                    .quick_change(QuickChange::Rule { id: rule, enabled })
+                    .await
+                    .map(|_| ()),
+                "play" | "pause" | "resumeAutomation" => service.media(action).await,
+                _ => Err(crate::model::err("Bilinmeyen menü komutu")),
+            };
+            if let Ok(snapshot) = service.get() {
+                publish(&snapshot);
+            }
+            let error = result
+                .err()
+                .map(|e| CString::new(e.to_string().replace('\0', "")).unwrap_or_default());
+            unsafe {
+                deskody_menu_result(error.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()));
+            }
+        });
     }
 }
 
@@ -63,7 +140,7 @@ async fn quit_app(app: tauri::AppHandle) {
 fn hide_panel(_: &tauri::AppHandle) {
     // Called exclusively by setup/window/tray events or run_on_main_thread.
     unsafe {
-        mac_panel::deskody_panel_hide();
+        mac_menu::deskody_menu_hide();
     }
 }
 
@@ -77,17 +154,6 @@ fn hide_panel(app: &tauri::AppHandle) {
             let _ = window.hide();
         }
     }
-}
-
-#[cfg(target_os = "macos")]
-fn toggle_panel(app: &tauri::AppHandle, _: Option<tauri::Rect>) -> tauri::Result<()> {
-    // Never call Tauri show/set_focus for the macOS host: set_focus activates
-    // the whole application and switches away from another app's fullscreen Space.
-    if !unsafe { mac_panel::deskody_panel_toggle() } {
-        return Err(std::io::Error::other("macOS hızlı paneli açılamadı").into());
-    }
-    app.state::<Service>().refresh();
-    Ok(())
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -251,18 +317,19 @@ pub fn run() {
         ])
         .setup(|app| {
             #[cfg(not(target_os = "macos"))]
-            app.manage(PanelState::default());
-            #[cfg(target_os = "macos")]
             {
-                let window = app
-                    .get_webview_window("tray-panel")
-                    .ok_or("Hızlı panel webview’ı bulunamadı")?;
-                // AppKit setup is on the main thread. The Tauri window remains
-                // registered/hidden; its content lives in our genuine NSPanel.
-                if !unsafe { mac_panel::deskody_panel_create(window.ns_window()?) } {
-                    return Err("Yerel macOS paneli oluşturulamadı".into());
-                }
+                app.manage(PanelState::default());
+                let config = app
+                    .config()
+                    .app
+                    .windows
+                    .iter()
+                    .find(|window| window.label == "tray-panel")
+                    .ok_or("Hızlı panel yapılandırması bulunamadı")?;
+                tauri::WebviewWindowBuilder::from_config(app, config)?.build()?;
             }
+            #[cfg(target_os = "macos")]
+            mac_menu::initialize(app.handle());
             let handle = app.handle().clone();
             let directory = std::env::var_os("DESKODY_CONFIG_DIR")
                 .or_else(|| std::env::var_os("MUSIC_OPTIMIZER_CONFIG_DIR"))
@@ -270,6 +337,8 @@ pub fn run() {
                 .unwrap_or(app.path().app_config_dir()?);
             let first_run = !directory.join("settings.json").exists();
             let service = Service::start(directory, move |snapshot| {
+                #[cfg(target_os = "macos")]
+                mac_menu::publish(&snapshot);
                 let _ = handle.emit("deskody://status", snapshot);
             })?;
             let bridge = service.bridge.clone();
@@ -282,13 +351,14 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "Çıkış", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&panel, &toggle, &open, &quit])?;
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
-            TrayIconBuilder::with_id("main-tray")
+            let tray = TrayIconBuilder::with_id("main-tray")
                 .icon(icon)
                 .icon_as_template(true)
                 .tooltip("Deskody")
                 .menu(&menu)
-                .show_menu_on_left_click(false)
+                .show_menu_on_left_click(cfg!(target_os = "macos"))
                 .on_menu_event(|app, event| match event.id.as_ref() {
+                    #[cfg(not(target_os = "macos"))]
                     "panel" => {
                         let rect = app
                             .tray_by_id("main-tray")
@@ -314,20 +384,38 @@ pub fn run() {
                     }
                     _ => (),
                 })
-                .on_tray_icon_event(|tray, event| {
+                .on_tray_icon_event(|_tray, _event| {
+                    #[cfg(not(target_os = "macos"))]
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
                         rect,
                         ..
-                    } = event
+                    } = _event
                     {
-                        if let Err(error) = toggle_panel(tray.app_handle(), Some(rect)) {
+                        if let Err(error) = toggle_panel(_tray.app_handle(), Some(rect)) {
                             eprintln!("Hızlı panel: {error}");
                         }
                     }
                 })
                 .build(app)?;
+            #[cfg(target_os = "macos")]
+            {
+                mac_menu::publish(&app.state::<Service>().get()?);
+                let attached = tray.with_inner_tray_icon(|tray| {
+                    tray.ns_status_item().is_some_and(|item| unsafe {
+                        mac_menu::deskody_menu_create(
+                            &*item as *const _ as *mut std::ffi::c_void,
+                            mac_menu::action,
+                        )
+                    })
+                })?;
+                if !attached {
+                    return Err("macOS menüsü oluşturulamadı".into());
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = tray;
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             if first_run {
@@ -364,7 +452,7 @@ pub fn run() {
         tauri::RunEvent::Exit => {
             #[cfg(target_os = "macos")]
             unsafe {
-                mac_panel::deskody_panel_destroy();
+                mac_menu::deskody_menu_destroy();
             }
             handle.state::<Service>().shutdown();
         }
