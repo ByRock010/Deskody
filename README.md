@@ -26,7 +26,7 @@ Boş liste alanı mevcut müziği devam ettirir. PDF, VS Code, Terminal, Xcode v
 
 macOS'taki `Code` / `com.microsoft.VSCode`, Windows'taki `Code.exe` ve Linux'taki `code`, `Visual Studio Code` koşuluyla eşleşir. **Kural durumu** alanı son çalışma uygulamasını, kimliğini, dosya/sekme bilgisini, kontrol edilen oynatıcıyı ve son kural olayını gösterir. Düzenleyicide **Son algılanan uygulamayı kullan** ile kesin uygulama kimliğini alabilirsiniz. Bu tanılama verileri yalnızca bellekte tutulur.
 
-**Müzik bağlantısı** alanı Spotify liste/albüm ve YouTube Music şarkı/liste/radyo/mix bağlantılarını kabul eder. **Diğer oynatıcılar** listesinden Spotify seçilirse de Spotify liste komutları uygulanır; YouTube Music veya Apple Music seçiliyken Spotify bağlantıları korunur ve mevcut müzik kontrol edilir. Otomasyon yalnızca seçili oynatıcıya komut verir; Spotify kapalıyken açık YouTube Music'e kendiliğinden geçmez.
+**Müzik bağlantısı** alanı Spotify şarkı/liste/albüm ve YouTube Music şarkı/liste/radyo/mix bağlantılarını kabul eder. **Diğer oynatıcılar** listesinden Spotify seçilirse de Spotify liste komutları uygulanır; YouTube Music veya Apple Music seçiliyken Spotify bağlantıları korunur ve mevcut müzik kontrol edilir. Otomasyon yalnızca seçili oynatıcıya komut verir; Spotify kapalıyken açık YouTube Music'e kendiliğinden geçmez.
 
 ## Platform yetenekleri
 
@@ -53,6 +53,12 @@ Tarayıcı eklentisi tüm platformlarda diğer sekmelerin `audible` durumunu ve 
 - `MPRemoteCommandCenter`, başka uygulamaları yöneten genel bir denetleyici değildir; uygulamanızın uzaktan medya komutlarını alması içindir. Bu nedenle üçüncü taraf kontrolünde kullanılmaz. [Apple açıklaması](https://developer.apple.com/documentation/mediaplayer/remote-command-center-events)
 - Windows yönetici izni istemez. Yükseltilmiş uygulamaların UIAutomation ağacına erişim Windows tarafından sınırlandırılabilir.
 - Buradaki **odak modu**, müzik otomasyonu durumudur. İşletim sisteminin bildirim/DND ayarını değiştirmez; bu özellik platformlar arasında ortak bir API'ye sahip değildir.
+
+## Spotify masaüstü — şarkı bağlantıları ve odak (0.1.10)
+
+Mac’te Spotify şarkı, liste ve albüm bağlantıları artık kurallarda kullanılabilir. Paylaşım bağlantısındaki `?si=...` kısmını silmeniz gerekmez. Spotify masaüstü uygulaması açık ve hesabınıza giriş yapılmış olmalı; bu yerel yol için Premium, Developer Client ID veya tarayıcı eklentisi gerekmez.
+
+Spotify’ın içerik başlatırken kendisini öne getirmesine karşı, komut sırasında çalıştığınız uygulamaya odağı geri veren kısa süreli bir koruma vardır. Kullanıcı başka bir uygulamayı seçerse koruma bırakılır. Normal/tam ekran senaryoları gerçek Spotify ile test edildi; Spotify’ın kendi aktivasyonu nedeniyle çok kısa bir görsel geçiş yine olabilir. [Araştırma, uygulama ayrıntıları ve test sınırları](docs/SPOTIFY.md).
 
 ## Spotify Web API (isteğe bağlı)
 

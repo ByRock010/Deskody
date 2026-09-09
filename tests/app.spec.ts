@@ -85,6 +85,26 @@ test("failed save keeps the edited rule open for retry", async ({ page }) => {
   await expect(dialog.getByRole("alert")).toContainText("kaydedilemedi");
 });
 
+test("Spotify shared track link saves and survives reopening the rule", async ({
+  page,
+}) => {
+  const link =
+    "https://open.spotify.com/track/4LhgwcTWwJQc6DFTkLXVEc?si=074c6afa0721455b";
+  await page.goto("/");
+  await page.getByRole("button", { name: "Kurallarım" }).click();
+  await page.getByRole("button", { name: "Ders çalışma düzenle" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Müzik bağlantısı", { exact: false }).fill(link);
+  await dialog.getByRole("button", { name: "Kuralı uygula" }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.reload();
+  await page.getByRole("button", { name: "Kurallarım" }).click();
+  await page.getByRole("button", { name: "Ders çalışma düzenle" }).click();
+  await expect(
+    dialog.getByLabel("Müzik bağlantısı", { exact: false }),
+  ).toHaveValue(link);
+});
+
 test("escape closes modal and preview never pretends to control the OS", async ({
   page,
 }) => {

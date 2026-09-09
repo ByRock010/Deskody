@@ -3,6 +3,7 @@ fn main() {
         cc::Build::new()
             .file("native/macos.m")
             .file("native/menu.m")
+            .file("native/spotify.m")
             .flag("-fobjc-arc")
             .flag("-mmacosx-version-min=12.0")
             .compile("deskody_native");
@@ -12,6 +13,7 @@ fn main() {
         println!("cargo:rerun-if-changed=native/macos.m");
         println!("cargo:rerun-if-changed=native/menu.m");
         println!("cargo:rerun-if-changed=native/menu.h");
+        println!("cargo:rerun-if-changed=native/spotify.m");
     }
     if std::env::var_os("CARGO_FEATURE_DESKTOP").is_some() {
         tauri_build::build();

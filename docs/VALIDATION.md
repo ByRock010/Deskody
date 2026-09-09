@@ -89,6 +89,14 @@ Spotify OAuth canlı hesap, Premium/Developer uygulama erişimi, macOS kullanıc
 
 ## Üretilen dosyalar
 
+### 0.1.10 Spotify şarkıları ve masaüstü odak koruması
+
+- `/Applications/Deskody.app` 0.1.10 kuruldu; tek çalışan örnek ve ayar/eşleştirme dosyalarının değişmediği doğrulandı. Önceki uygulama `.tools/installed-backups/20260909-215234/` altında. Ad-hoc app imzası ve `hdiutil verify` başarılı. DMG SHA-256: `33d6d9d8791f6f3aa164838cd2fa3328060d39ae5ed34523fd3e5f3a13c1e8b4`.
+- TypeScript/Vite build, 10 Vitest ve 40 Rust testi başarılı. Mac Clippy `--all-targets -- -D warnings` ve Windows x86_64 GNU **desktop feature açık tam çapraz cargo check** başarılı. Windows üzerinde çalıştırma/kurulum testi değildir.
+- Playwright ana uygulama/tray: 13 başarılı. Kullanıcının tam Spotify `track` paylaşım URL’si arayüzden kaydedilip yeniden açılarak doğrulandı; mevcut playlist ve YouTube Music testleri de geçti.
+- `python3 scripts/test-native-spotify.py --live spotify:track:4LhgwcTWwJQc6DFTkLXVEc`: odak korumasının sınırları ve gözlemci temizliği, ardından gerçek Spotify masaüstünde normal ve başka sürecin gerçek tam ekran penceresiyle başarılı. Her iki canlı testte doğru track ID/playing=true, özgün ön uygulama ve Space korundu; kullanıcı tıklaması/üçüncü uygulama aktivasyonu yoktu. Bildirimler arasındaki en uzun Spotify ön-plan aralığı 3,5/3,7 ms idi. Bu ekran animasyonu süresi değildir ve sıfır görsel geçiş garantisi vermez.
+- Canlı test Premium/Web API/Spotify Web kullanmadı. Başlangıçta duraklatılmış olan oynatıcı tekrar duraklatıldı. Eklenti kodu değiştirilmedi. [Araştırma ve üretim sınırları](SPOTIFY.md).
+
 ### 0.1.9 macOS sistem menüsü
 
 - `/Applications/Deskody.app` 0.1.9 olarak kuruldu ve tek çalışan örnek doğrulandı. Ayar/eşleştirme dosyalarının hash’leri değişmedi. Önceki uygulama `.tools/installed-backups/20260907-143643/` altında. App imzası ve `hdiutil verify` başarılı; `Deskody_0.1.9_aarch64.dmg` SHA-256: `b61f2a483538fd45d10a46adfda6a2b2f10e2a31c4677a161be7be978079645b`.

@@ -91,6 +91,31 @@ describe("untrusted rule import", () => {
 });
 
 import musicTargets from "../tests/fixtures/music-targets.json";
+import spotifyTargets from "../tests/fixtures/spotify-targets.json";
+describe("Spotify playback targets", () => {
+  it("accepts shared track, playlist and album links and preserves imported rules", () => {
+    for (const { input } of spotifyTargets.valid) {
+      const rule = {
+        ...defaultSettings().rules[0],
+        action: { kind: "play" as const, playlist: input },
+      };
+      expect(validateRule(rule), input).toBeNull();
+      expect(parseImport(JSON.stringify([rule]))[0].action).toEqual(
+        rule.action,
+      );
+    }
+  });
+  it("rejects credentials, spoofed hosts and unsupported Spotify targets", () => {
+    for (const input of spotifyTargets.invalid)
+      expect(
+        validateRule({
+          ...defaultSettings().rules[0],
+          action: { kind: "play", playlist: input },
+        }),
+        input,
+      ).toBeTruthy();
+  });
+});
 import { youtubeMusicUrl } from "../browser-extension/media-target.js";
 describe("YouTube Music playback targets", () => {
   it("preserves song, playlist, radio and mix parameters and strips tracking", () => {

@@ -268,7 +268,7 @@ export default function App() {
               : rule.action.playlist
                 ? rule.action.playlist.startsWith("https://music.youtube.com/")
                   ? "YouTube Music · şarkı / liste"
-                  : "Spotify listesi"
+                  : "Spotify · şarkı / liste / albüm"
                 : "Mevcut müziği çal"}
           </span>
         </button>
@@ -917,8 +917,8 @@ export default function App() {
                       <div>
                         <strong>Spotify Web API</strong>
                         <p>
-                          Windows'ta liste başlatma ve tüm platformlarda Spotify
-                          Connect.
+                          Windows'ta bağlantıdan müzik başlatma ve tüm
+                          platformlarda Spotify Connect.
                         </p>
                       </div>
                       <Toggle
@@ -1504,7 +1504,7 @@ function RuleEditor({
               />
               <small>
                 {spotify
-                  ? "Spotify liste/albüm veya YouTube Music şarkı, liste, radyo, mix bağlantısı yapıştır. Bağlantı seçili müzik kaynağıyla eşleştiğinde kullanılır."
+                  ? "Spotify şarkı, liste, albüm veya YouTube Music şarkı, liste, radyo, mix bağlantısı yapıştır. Bağlantı seçili müzik kaynağıyla eşleştiğinde kullanılır."
                   : "YouTube Music şarkı, liste, radyo veya mix bağlantısı yapıştır. Ayarlar’da YouTube Music kaynağı ve güncel tarayıcı eklentisi seçili olmalı. Spotify bağlantıları da kaydedilebilir."}
               </small>
             </label>

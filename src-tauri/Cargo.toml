@@ -1,6 +1,6 @@
 [package]
 name = "deskody"
-version = "0.1.9"
+version = "0.1.10"
 description = "Context-aware, local-first music automation"
 authors = ["Deskody"]
 edition = "2021"

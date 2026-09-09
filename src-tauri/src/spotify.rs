@@ -456,10 +456,7 @@ impl Platform for WithSpotify {
             return self.native.play(player, uri);
         }
         let id = Self::device(player)?;
-        let body = uri
-            .map(crate::config::spotify_uri)
-            .transpose()?
-            .map(|uri| serde_json::json!({"context_uri":uri}));
+        let body = playback_body(uri)?;
         self.request(
             reqwest::Method::PUT,
             &format!("me/player/play?device_id={id}"),
@@ -501,9 +498,43 @@ impl Platform for WithSpotify {
     }
 }
 
+// Spotify accepts individual tracks under `uris`; contexts are only for
+// playlists/albums (and artists, which Deskody does not accept as rule targets).
+fn playback_body(input: Option<&str>) -> Result<Option<serde_json::Value>> {
+    input
+        .map(|input| {
+            let uri = crate::config::spotify_uri(input)?;
+            Ok(if uri.starts_with("spotify:track:") {
+                serde_json::json!({"uris": [uri]})
+            } else {
+                serde_json::json!({"context_uri": uri})
+            })
+        })
+        .transpose()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn playback_request_distinguishes_tracks_contexts_and_resume() {
+        assert_eq!(playback_body(None).unwrap(), None);
+        assert_eq!(
+            playback_body(Some(
+                "https://open.spotify.com/track/4LhgwcTWwJQc6DFTkLXVEc?si=074c6afa0721455b"
+            ))
+            .unwrap(),
+            Some(serde_json::json!({"uris":["spotify:track:4LhgwcTWwJQc6DFTkLXVEc"]}))
+        );
+        for kind in ["playlist", "album"] {
+            let uri = format!("spotify:{kind}:37i9dQZF1EIWSf6WayhJZ9");
+            assert_eq!(
+                playback_body(Some(&uri)).unwrap(),
+                Some(serde_json::json!({"context_uri":uri}))
+            );
+        }
+        assert!(playback_body(Some("spotify:artist:37i9dQZF1EIWSf6WayhJZ9")).is_err());
+    }
     #[test]
     fn pkce_matches_rfc7636_vector() {
         assert_eq!(

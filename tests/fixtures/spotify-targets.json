@@ -1,0 +1,46 @@
+{
+  "valid": [
+    {
+      "input": "https://open.spotify.com/track/4LhgwcTWwJQc6DFTkLXVEc?si=074c6afa0721455b",
+      "output": "spotify:track:4LhgwcTWwJQc6DFTkLXVEc"
+    },
+    {
+      "input": "https://open.spotify.com/playlist/37i9dQZF1EIWSf6WayhJZ9?si=f5337dba443548f1",
+      "output": "spotify:playlist:37i9dQZF1EIWSf6WayhJZ9"
+    },
+    {
+      "input": "https://open.spotify.com/album/1234567890123456789012/?si=test#share",
+      "output": "spotify:album:1234567890123456789012"
+    },
+    {
+      "input": " spotify:track:4LhgwcTWwJQc6DFTkLXVEc ",
+      "output": "spotify:track:4LhgwcTWwJQc6DFTkLXVEc"
+    },
+    {
+      "input": " spotify:playlist:37i9dQZF1EIWSf6WayhJZ9 ",
+      "output": "spotify:playlist:37i9dQZF1EIWSf6WayhJZ9"
+    },
+    {
+      "input": " spotify:album:1234567890123456789012 ",
+      "output": "spotify:album:1234567890123456789012"
+    }
+  ],
+  "invalid": [
+    "https://open.spotify.com.evil.test/track/4LhgwcTWwJQc6DFTkLXVEc",
+    "https://open.spotify.com@evil.test/track/4LhgwcTWwJQc6DFTkLXVEc",
+    "https://:secret@open.spotify.com/track/4LhgwcTWwJQc6DFTkLXVEc",
+    "https://user@open.spotify.com/track/4LhgwcTWwJQc6DFTkLXVEc",
+    "https://open.spotify.com:444/track/4LhgwcTWwJQc6DFTkLXVEc",
+    "http://open.spotify.com/track/4LhgwcTWwJQc6DFTkLXVEc",
+    "https://open.spotify.com//track/4LhgwcTWwJQc6DFTkLXVEc",
+    "https://open.spotify.com/track/4LhgwcTWwJQc6DFTkLXVEc//",
+    "https://open.spotify.com/track/4LhgwcTWwJQc6DFTkLXVEc/extra",
+    "https://open.spotify.com/artist/4LhgwcTWwJQc6DFTkLXVEc",
+    "spotify:artist:4LhgwcTWwJQc6DFTkLXVEc",
+    "spotify:track:4LhgwcTWwJQc6DFTkLXVEc:extra",
+    "spotify:track:short",
+    "spotify:track:123456789012345678901_",
+    "file:///tmp/song",
+    "javascript:alert(1)"
+  ]
+}

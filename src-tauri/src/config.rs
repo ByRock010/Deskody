@@ -187,32 +187,35 @@ pub fn target_for_settings(input: &str, settings: &Settings) -> bool {
     }
 }
 
-/// Return a canonical URI; reject all schemes/paths except Spotify playlists/albums.
+/// Return a canonical Spotify track/playlist/album URI, stripping share parameters.
 pub fn spotify_uri(input: &str) -> Result<String> {
+    let input = input.trim();
     let parts: Vec<String> = if input.starts_with("spotify:") {
         input.split(':').map(str::to_owned).collect()
     } else {
-        let u = url::Url::parse(input).map_err(|_| err("Spotify liste bağlantısı geçersiz"))?;
+        let u = url::Url::parse(input).map_err(|_| err("Spotify müzik bağlantısı geçersiz"))?;
         if u.scheme() != "https"
             || u.host_str() != Some("open.spotify.com")
             || !u.username().is_empty()
+            || u.password().is_some()
             || u.port().is_some()
         {
             return Err(err("Yalnızca open.spotify.com bağlantıları kabul edilir"));
         }
-        let path: Vec<_> = u.path().trim_matches('/').split('/').collect();
+        let path = u.path().strip_prefix('/').unwrap_or(u.path());
+        let path: Vec<_> = path.strip_suffix('/').unwrap_or(path).split('/').collect();
         if path.len() != 2 {
-            return Err(err("Spotify liste veya albüm bağlantısı kullanın"));
+            return Err(err("Spotify şarkı, liste veya albüm bağlantısı kullanın"));
         }
         vec!["spotify".into(), path[0].into(), path[1].into()]
     };
     if parts.len() != 3
-        || !matches!(parts[1].as_str(), "playlist" | "album")
+        || !matches!(parts[1].as_str(), "track" | "playlist" | "album")
         || parts[2].len() != 22
         || !parts[2].bytes().all(|b| b.is_ascii_alphanumeric())
     {
         return Err(err(
-            "Spotify liste/albüm kimliği 22 alfasayısal karakter olmalı",
+            "Spotify şarkı/liste/albüm kimliği 22 alfasayısal karakter olmalı",
         ));
     }
     Ok(parts.join(":"))
@@ -322,12 +325,40 @@ mod tests {
             "spotify:playlist:1234567890123456789012"
         );
         for invalid in [
-            "spotify:track:1234567890123456789012",
+            "spotify:artist:1234567890123456789012",
             "https://open.spotify.com.evil/playlist/1234567890123456789012",
             "spotify:playlist:\" & do shell script",
             "file:///tmp/foo",
         ] {
             assert!(spotify_uri(invalid).is_err());
+        }
+    }
+    #[test]
+    fn spotify_shared_targets_validate_roundtrip_and_match_the_provider() {
+        let corpus: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/spotify-targets.json"))
+                .unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let store = Store::new(directory.path());
+        for entry in corpus["valid"].as_array().unwrap() {
+            let input = entry["input"].as_str().unwrap();
+            assert_eq!(
+                spotify_uri(input).unwrap(),
+                entry["output"].as_str().unwrap()
+            );
+            let mut settings = Settings::default();
+            settings.rules[0].action = Action::Play {
+                playlist: Some(input.into()),
+            };
+            store.save(&settings).unwrap();
+            assert_eq!(store.load().unwrap(), settings);
+            assert!(target_for_settings(input, &settings));
+            settings.provider = Provider::System;
+            settings.target_player = "browser:music.youtube.com".into();
+            assert!(!target_for_settings(input, &settings));
+        }
+        for input in corpus["invalid"].as_array().unwrap() {
+            assert!(spotify_uri(input.as_str().unwrap()).is_err(), "{input}");
         }
     }
     #[test]

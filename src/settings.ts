@@ -104,7 +104,7 @@ export function validateRule(rule: Rule): string | null {
       if (uri.startsWith("https://music.youtube.com/"))
         return String(error instanceof Error ? error.message : error);
     }
-    if (!/^spotify:(playlist|album):[a-zA-Z0-9]{22}$/.test(uri)) {
+    if (!/^spotify:(track|playlist|album):[a-zA-Z0-9]{22}$/.test(uri)) {
       try {
         const u = new URL(uri);
         if (
@@ -113,7 +113,7 @@ export function validateRule(rule: Rule): string | null {
           u.username ||
           u.password ||
           u.port ||
-          !/^\/(playlist|album)\/[a-zA-Z0-9]{22}\/?$/.test(u.pathname)
+          !/^\/(track|playlist|album)\/[a-zA-Z0-9]{22}\/?$/.test(u.pathname)
         )
           return "Geçerli bir Spotify veya YouTube Music bağlantısı girin.";
       } catch {
