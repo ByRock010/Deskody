@@ -3,10 +3,11 @@
 @property(strong) NSWindow *window;
 @property(copy) NSString *marker;
 @property BOOL fullscreen;
+@property BOOL focusLost;
 @end
 @implementation FocusHost
 - (void)ready {
-    [@"ready" writeToFile:[self.marker stringByAppendingString:@".ready"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    [[NSString stringWithFormat:@"%d", getpid()] writeToFile:[self.marker stringByAppendingString:@".ready"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
     self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(120,120,800,500)
@@ -26,10 +27,13 @@
         if (self.fullscreen) [self.window toggleFullScreen:nil]; else [self ready];
     });
     [NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *timer) {
+        if ([NSFileManager.defaultManager fileExistsAtPath:[self.marker stringByAppendingString:@".observe"]]
+            && (!self.window.onActiveSpace || NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier != getpid())) self.focusLost = YES;
         if ([NSFileManager.defaultManager fileExistsAtPath:[self.marker stringByAppendingString:@".stop"]]) {
-            BOOL valid = self.window.onActiveSpace && NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier == getpid()
+            BOOL valid = !self.focusLost && self.window.onActiveSpace && NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier == getpid()
                 && (!self.fullscreen || (self.window.styleMask & NSWindowStyleMaskFullScreen));
             printf("Host: original window/Space/foreground preserved: %d\n", valid);
+            [(valid ? @"passed" : @"failed") writeToFile:[self.marker stringByAppendingString:@".done"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             exit(valid ? 0 : 1);
         }
     }];

@@ -10,5 +10,7 @@ pub mod platform;
 pub mod process;
 pub mod runtime;
 pub mod spotify;
+#[cfg(target_os = "macos")]
+pub mod spotify_desktop;
 #[cfg(feature = "desktop")]
 pub use desktop::run;

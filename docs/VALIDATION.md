@@ -1,3 +1,17 @@
+# Deskody doğrulama — 0.1.11 / 2026-09-10
+
+- Spotify 1.2.99.317’nin kendi `spotify_cli` aracı kullanılarak gerçek masaüstü oynatma doğrulandı. AppleScript `play track`/PCtx ve odak geri alma koruması kaldırıldı. Premium, Developer hesabı veya Spotify Web kullanılmadı.
+- `python3 scripts/test-native-spotify.py --live spotify:track:4LhgwcTWwJQc6DFTkLXVEc --seed spotify:playlist:37i9dQZF1EIWSf6WayhJZ9`: üretim Rust fonksiyonu ile önce farklı listeden içerik, ardından hedef şarkı. Hem normal hem gerçek tam ekran fixture’da başlangıç parçasının hedeften farklı olduğu doğrulandı; komut kodu 0, doğru track ID, playing=true, **Spotify activated=0**, özgün ön uygulama ve Space korundu. Fare/üçüncü uygulama aktivasyonu yoktu. Seed’siz iki senaryoda da önceki test geçti. Başlangıçtaki duraklatılmış durum testten sonra geri getirildi.
+- 47 Rust testi başarılı; yedi yeni CLI testi yerel cihaz, transfer onayı, hata halinde durma, URI güvenliği ve beklenmeyen yanıt davranışını kapsıyor. `npm run check`: TypeScript/Vite üretim derlemesi ve 10 Vitest başarılı. macOS tüm target’lar Clippy `-D warnings`, Rustfmt, native resolver testi ve `git diff --check` başarılı.
+- macOS ARM64 app/DMG üretildi. Ad-hoc imza strict doğrulaması ve `hdiutil verify` başarılı. `/Applications/Deskody.app` 0.1.11 kuruldu, tek çalışan örnek doğrulandı; kullanıcı ayarları ve tarayıcı eşleştirme dosyalarının hash’leri değişmedi. Önceki kurulum `.tools/installed-backups/20260910-093050/` altında.
+- Yeni oynatma yolu macOS ile sınırlıdır; Windows/Linux çalışma zamanı ve yeni paketleri bu değişiklikte test edilmedi. Başka fiziksel Spotify Connect cihazına aktarım canlı test edilmedi; hedef seçimi ve başarısız aktarım Rust fixture’larıyla sınandı. Eklenti değiştirilmedi. Apple notarization uygulanmadı. Spotify’ın diğer/eski dağıtımlarında CLI bulunacağı veya aynı şemayı koruyacağı garanti edilmez; eksik araç güncelleme hatası üretir, pencereyi aktive eden fallback yoktur. [Araştırma ve uygulama ayrıntıları](SPOTIFY.md).
+
+DMG: `src-tauri/target/release/bundle/dmg/Deskody_0.1.11_aarch64.dmg`
+
+SHA-256: `24485a072c4261a3f8773e5c33559e9a17187f441916c7047749c1cc7eaf539c`
+
+---
+
 # Deskody doğrulama — 0.1.6 / 2026-09-07
 
 - Uygulama/pencere/tray/izin/OAuth/HTML başlıkları Deskody; eklenti ve eşleştirme sayfası Deskody Bridge olarak güncellendi. Rust/npm paket ve executable adları deskody. Kural dışa aktarma adı deskody-rules.json.

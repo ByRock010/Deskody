@@ -1,5 +1,5 @@
 use super::*;
-use crate::{config::spotify_uri, process};
+use crate::{process, spotify_desktop};
 use std::{
     ffi::{c_char, CStr, CString},
     time::{Duration, Instant},
@@ -11,7 +11,6 @@ unsafe extern "C" {
     fn mo_audio_supported() -> bool;
     fn mo_request_accessibility();
     fn mo_media_key();
-    fn mo_spotify_play(uri: *const c_char) -> i32;
     fn mo_free(pointer: *mut c_char);
 }
 
@@ -160,18 +159,7 @@ impl Platform for MacOs {
             if player != "com.spotify.client" {
                 return Err(err("Bu oynatıcı liste açmayı desteklemiyor"));
             }
-            let uri =
-                CString::new(spotify_uri(uri)?).map_err(|_| err("Spotify bağlantısı geçersiz"))?;
-            // A direct, non-interactive Apple Event to the running PID avoids
-            // script bridge launch/reopen behavior and never opens a Spotify URL.
-            let code = unsafe { mo_spotify_play(uri.as_ptr()) };
-            match code {
-                0 => (),
-                -600 => return Err(err("Spotify uygulamasını açıp hesabına giriş yapın")),
-                -1743 | -1744 => return Err(err("Spotify kontrol izni gerekli. System Settings → Privacy & Security → Automation bölümünde Deskody için Spotify iznini açın.")),
-                -1712 => return Err(err("Spotify oynatma komutuna zamanında yanıt vermedi")),
-                _ => return Err(err(format!("Spotify içeriği başlatılamadı (Apple Event {code}). Oturumunu ve içerik erişimini kontrol et."))),
-            }
+            spotify_desktop::play(uri)?;
         } else {
             script("function run(a){ const s=Application(a[0]); if(!s.running())throw Error('Oynatıcı kapalı'); s.play(); }", &[player])?;
         }

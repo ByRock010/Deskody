@@ -1,4 +1,9 @@
-#import "../src-tauri/native/spotify.m"
+#import <Cocoa/Cocoa.h>
+static uint32_t mouseDownCount(void) {
+    return CGEventSourceCounterForEventType(kCGEventSourceStateCombinedSessionState, kCGEventLeftMouseDown)
+         + CGEventSourceCounterForEventType(kCGEventSourceStateCombinedSessionState, kCGEventRightMouseDown)
+         + CGEventSourceCounterForEventType(kCGEventSourceStateCombinedSessionState, kCGEventOtherMouseDown);
+}
 static NSAppleEventDescriptor *property(OSType code, NSAppleEventDescriptor *container) {
     NSAppleEventDescriptor *spec = NSAppleEventDescriptor.recordDescriptor;
     [spec setDescriptor:[NSAppleEventDescriptor descriptorWithTypeCode:typeProperty] forKeyword:keyAEDesiredClass];
@@ -24,11 +29,18 @@ int main(int argc, const char *argv[]) { @autoreleasepool {
     NSRunningApplication *spotify = [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.spotify.client"].firstObject;
     if (!spotify) return 2;
     pid_t pid=spotify.processIdentifier, original=NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier;
-    if (argc > 2 && original != atoi(argv[2])) { fprintf(stderr,"Fullscreen host is not foreground\n"); return 5; }
+    if (argc != 4) return 2;
+    if (original != atoi(argv[2])) { fprintf(stderr,"Fullscreen host is not foreground\n"); return 5; }
     if (original == pid) { fprintf(stderr,"Spotify is already foreground; focus test cannot run\n"); return 3; }
     NSAppleEventDescriptor *beforeState = readProperty(pid, property('pPlS',nil));
     if (!beforeState) return 4;
     printf("Initial playing: %d\n", beforeState.enumCodeValue == 'kPSP');
+    NSString *beforeTrack = readProperty(pid,property('ID  ',property('pTrk',nil))).stringValue;
+    if (!beforeTrack || [beforeTrack isEqual:[NSString stringWithUTF8String:argv[1]]]) {
+        fprintf(stderr,"A different initial track is required; pass --seed to the test script\n");
+        return 6;
+    }
+    printf("Target differs from initial track: 1\n");
     if (argc < 2) return 0;
     uint32_t clicksBefore = mouseDownCount();
     __block unsigned thirdApps = 0;
@@ -43,7 +55,17 @@ int main(int argc, const char *argv[]) { @autoreleasepool {
     __block BOOL finished = NO;
     __block int32_t result = -1;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0), ^{
-        int32_t code = mo_spotify_play(argv[1]);
+        // Exercise production Rust, including native path lookup, target-device
+        // selection and bounded command execution. No alternate test play path.
+        NSTask *task = [NSTask new];
+        task.executableURL = [NSURL fileURLWithPath:[NSString stringWithUTF8String:argv[3]]];
+        task.arguments = @[[NSString stringWithUTF8String:argv[1]]];
+        NSError *error = nil;
+        int32_t code = -1;
+        if ([task launchAndReturnError:&error]) {
+            [task waitUntilExit];
+            code = task.terminationStatus;
+        }
         dispatch_async(dispatch_get_main_queue(), ^{ result=code; finished=YES; });
     });
     NSDate *deadline=[NSDate dateWithTimeIntervalSinceNow:9];
@@ -62,5 +84,5 @@ int main(int argc, const char *argv[]) { @autoreleasepool {
         [pause sendEventWithOptions:NSAppleEventSendWaitForReply | NSAppleEventSendNeverInteract timeout:3 error:nil];
     }
     [NSWorkspace.sharedWorkspace.notificationCenter removeObserver:observer];
-    return finished && result==0 && playing && matches && NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier==original && activationTime==0 && longest < 1.0 ? 0 : 1;
+    return finished && result==0 && playing && matches && NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier==original && !switched && thirdApps==0 && mouseDownCount()==clicksBefore ? 0 : 1;
 } }

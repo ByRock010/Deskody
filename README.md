@@ -19,7 +19,7 @@ Yalnızca arayüzü görmek için `npm run dev`. Web önizlemesi müzik kontrol 
 
 1. Spotify masaüstü uygulamasını açıp bir parça seçin.
 2. **Ayarlar → Sistem izinleri** bölümünden macOS Erişilebilirlik iznini verin. Spotify/tarayıcı erişiminde macOS Automation onayını tamamlayın. İzin değişince **Yenile** düğmesini kullanın. macOS bazen uygulamanın yeniden açılmasını ister.
-3. **Kurallarım** bölümünde uygulama veya dosya bağlamını, eylemi ve isteğe bağlı Spotify liste bağlantısını seçin. **Kuralı uygula** doğrudan kaydeder ve çalışan motora iletir. Kural anahtarları ve silme işlemi de doğrudan kaydedilir. Genel ayarlar ve içe aktarma için **Değişiklikleri kaydet** kullanılır.
+3. **Kurallarım** bölümünde uygulama veya dosya bağlamını, eylemi ve isteğe bağlı müzik bağlantısını seçin. **Kuralı uygula** doğrudan kaydeder ve çalışan motora iletir. Kural anahtarları ve silme işlemi de doğrudan kaydedilir. Genel ayarlar ve içe aktarma için **Değişiklikleri kaydet** kullanılır.
 4. **Genel bakış** ekranındaki otomasyonu açın. Varsayılan olarak kapalıdır.
 
 Boş liste alanı mevcut müziği devam ettirir. PDF, VS Code, Terminal, Xcode ve Windows Terminal kuralları hazır gelir; kendi listelerinizi eşleştirin. Kural uygulama alanında yerel uygulama adı veya tam uygulama kimliği kullanabilirsiniz.
@@ -35,7 +35,7 @@ macOS'taki `Code` / `com.microsoft.VSCode`, Windows'taki `Code.exe` ve Linux'tak
 | Aktif uygulama/pencere | NSWorkspace + AX                         | Win32 + UIAutomation                | X11/EWMH, Sway, Hyprland                 |
 | Tarayıcı URL'si        | Safari/Chromium JXA; eklenti alternatifi | UIAutomation; eklenti alternatifi   | Eklenti                                  |
 | Spotify play/pause     | AppleScript/JXA                          | GSMTC                               | MPRIS                                    |
-| Spotify liste başlatma | AppleScript veya Web API                 | **Web API gerekir**                 | MPRIS OpenUri desteklenirse veya Web API |
+| Spotify liste başlatma | Spotify’ın yerel CLI aracı veya Web API | **Web API gerekir**                 | MPRIS OpenUri desteklenirse veya Web API |
 | Diğer oynatıcılar      | Apple Music; eklentili YouTube Music     | Seçili GSMTC oturumu; eklentili YTM | Seçili MPRIS oturumu; eklentili YTM      |
 | Ses geçişleri          | Spotify/Apple Music ses seviyesi         | Spotify WASAPI oturumu              | MPRIS Volume desteklenirse               |
 | Diğer medya algılama   | macOS 14.2+ CoreAudio çıkış süreçleri    | WASAPI peak meter + GSMTC           | MPRIS oynatma durumu                     |
@@ -54,11 +54,13 @@ Tarayıcı eklentisi tüm platformlarda diğer sekmelerin `audible` durumunu ve 
 - Windows yönetici izni istemez. Yükseltilmiş uygulamaların UIAutomation ağacına erişim Windows tarafından sınırlandırılabilir.
 - Buradaki **odak modu**, müzik otomasyonu durumudur. İşletim sisteminin bildirim/DND ayarını değiştirmez; bu özellik platformlar arasında ortak bir API'ye sahip değildir.
 
-## Spotify masaüstü — şarkı bağlantıları ve odak (0.1.10)
+## Spotify masaüstü — arka planda oynatma (0.1.11)
 
 Mac’te Spotify şarkı, liste ve albüm bağlantıları artık kurallarda kullanılabilir. Paylaşım bağlantısındaki `?si=...` kısmını silmeniz gerekmez. Spotify masaüstü uygulaması açık ve hesabınıza giriş yapılmış olmalı; bu yerel yol için Premium, Developer Client ID veya tarayıcı eklentisi gerekmez.
 
-Spotify’ın içerik başlatırken kendisini öne getirmesine karşı, komut sırasında çalıştığınız uygulamaya odağı geri veren kısa süreli bir koruma vardır. Kullanıcı başka bir uygulamayı seçerse koruma bırakılır. Normal/tam ekran senaryoları gerçek Spotify ile test edildi; Spotify’ın kendi aktivasyonu nedeniyle çok kısa bir görsel geçiş yine olabilir. [Araştırma, uygulama ayrıntıları ve test sınırları](docs/SPOTIFY.md).
+İçerik başlatmak için açık Spotify uygulamasının kendi paketindeki `spotify_cli` kullanılır. Önce bu Mac’in Spotify oturumu doğrulanır; başka cihaz aktifse oynatma bu Mac’e aktarılır ve ardından şarkı/liste/albüm başlatılır. Önceki AppleScript `play track` ve odak geri alma kodu kaldırıldı. Normal ve tam ekran pencerelerde Spotify’ın hiç aktive olmaması canlı testin kabul koşuludur.
+
+Spotify güncel olmalı ve paketinde bu kontrol aracı bulunmalı (doğrulanan istemci: 1.2.99.317). Eski sürümlerde pencereyi öne getiren bir yedek yöntem çalıştırılmaz; Spotify’ı güncelleme hatası gösterilir. Duraklatma, devam etme ve ses ayarı mevcut AppleScript kontrolünü kullanır. Spotify’ın kendi hesap/reklam/içerik kısıtları geçerlidir. [Araştırma, uygulama ayrıntıları ve test sınırları](docs/SPOTIFY.md).
 
 ## Spotify Web API (isteğe bağlı)
 
@@ -150,6 +152,7 @@ src-tauri/src/
   config.rs                  Doğrulama, atomik kayıt, Spotify URI güvenliği
   browser.rs                 Eşleştirilmiş loopback köprüsü ve YTM adaptörü
   spotify.rs                 OAuth/PKCE, güvenli depo, Spotify Web API
+  spotify_desktop.rs         macOS Spotify yerel CLI oynatma ve cihaz seçimi
   desktop.rs                 Tauri komutları, tray ve pencere yaşam döngüsü
 src-tauri/native/macos.m      Rust FFI için küçük Cocoa/AX/CoreAudio katmanı
 browser-extension/           Chromium eklentisi kaynakları
