@@ -1,0 +1,36 @@
+DESKODY — WINDOWS TEST SONUCLARI
+
+Windows sürümü (Ayarlar → Sistem → Hakkında):
+İşlemci türü (Intel/AMD, x64):
+Tarayıcı ve sürümü:
+Spotify masaüstü sürümü (test edildiğinde):
+Kullanılan müzik kaynağı:
+
+Her madde için: Çalıştı / Çalışmadı / Test etmedim.
+
+[ ] Kurulum tamamlandı; Deskody açıldı.
+[ ] Uygulama listesinde VS Code/Not Defteri vb. göründü.
+[ ] Chrome/Edge eklentisi eşleşti; YouTube Music parçası algılandı.
+[ ] Uygulama kuralına geçince istenen YouTube Music içeriği başladı.
+[ ] Bu geçişte müzik sayfası veya Deskody öne gelmedi.
+[ ] Ses duyuldu ve parça 30 saniyeden uzun süre kesintisiz devam etti.
+[ ] YouTube video izlerken müzik durdu; bağlam değişince devam etti.
+[ ] Birden çok uygulama seçilen kural her uygulamada çalıştı.
+[ ] Saat yanındaki simgeden hızlı kontrol menüsü açıldı.
+[ ] Menüde akış kontrolü ve tekil kurallar açılıp kapatılabildi.
+[ ] Tam ekran uygulamadan tray açılabildi; ekran/odak sıçramadı.
+[ ] Uygulamayı kapatıp açınca kurallar ve eşleştirme korundu.
+[ ] Spotify'da bağlantı alanı BOŞ kural mevcut müziği çaldı/duraklattı.
+
+Not: API bağlantısı olmadan Spotify şarkı/liste linki başlatma bu Windows
+sürümünde desteklenmiyor; bunu yeni bir hata olarak değerlendirmeyin.
+
+HATA VARSA
+Hangi adımlar sonrasında oldu:
+Beklenen davranış:
+Gerçekleşen davranış:
+Deskody Etkinlik bölümündeki hata metni:
+Tekrarlandığında aynı sonuç oluyor mu:
+Varsa ekran görüntüsü/video dosyasının adı:
+
+Eşleştirme anahtarı, token veya kişisel ayar dosyası eklemeyin.

@@ -53,6 +53,9 @@ jobs:
         run: npm run bundle -- --bundles ${{ matrix.bundles }}
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
+      - name: Package Windows tester kit
+        if: runner.os == 'Windows'
+        run: python scripts/package-windows-test.py
       - name: Archive macOS app with executable permissions
         if: runner.os == 'macOS'
         run: ditto -c -k --sequesterRsrc --keepParent "src-tauri/target/release/bundle/macos/Deskody.app" "src-tauri/target/release/bundle/macos/Deskody.app.zip"
@@ -65,4 +68,6 @@ jobs:
             src-tauri/target/release/bundle/**/*.exe
             src-tauri/target/release/bundle/**/*.deb
             src-tauri/target/release/bundle/**/*.AppImage
+            dist-releases/*.zip
+            dist-releases/*.sha256
           if-no-files-found: error

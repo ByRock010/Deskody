@@ -23,17 +23,17 @@ if (
   existsSync("/Library/Developer/CommandLineTools/usr/bin/clang")
 )
   env.DEVELOPER_DIR = "/Library/Developer/CommandLineTools";
-const binary =
+// Invoke the JS entry point with the current Node executable. Going through
+// tauri.cmd + shell on Windows double-quotes Node and breaks installer builds.
+const binary = command === "tauri" ? process.execPath : command;
+const childArgs =
   command === "tauri"
-    ? resolve(
-        "node_modules/.bin",
-        process.platform === "win32" ? "tauri.cmd" : "tauri",
-      )
-    : command;
-const child = spawn(binary, args, {
+    ? [resolve("node_modules/@tauri-apps/cli/tauri.js"), ...args]
+    : args;
+const child = spawn(binary, childArgs, {
   stdio: "inherit",
   env,
-  shell: process.platform === "win32" && command === "tauri",
+  shell: false,
 });
 child.on("error", (error) => {
   console.error(error.message);

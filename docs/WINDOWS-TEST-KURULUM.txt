@@ -1,0 +1,75 @@
+DESKODY — WINDOWS TEST PAKETI
+
+Bu paket Windows 10/11, 64 bit Intel/AMD bilgisayarlar içindir.
+Windows ARM ve 32 bit Windows bu test paketinin hedefi değildir.
+Rust, Node.js, Visual Studio veya kaynak kod indirmeniz gerekmez.
+
+1. UYGULAMAYI KURUN
+
+- ZIP'e sağ tıklayıp "Tümünü ayıkla / Extract All" seçin.
+- Klasördeki Deskody_*_x64-setup.exe dosyasını çalıştırın.
+- Bu test sürümü kod imzalı değildir. Dosyayı doğrudan geliştiriciden
+  aldığınızdan eminseniz, SmartScreen'in tanınmayan uygulama uyarısında
+  "Daha fazla bilgi / More info" → "Yine de çalıştır / Run anyway" kullanın.
+  Antivirüsü veya Windows güvenlik korumalarını kapatmayın.
+- Kurulum WebView2'yi denetler; eksikse Microsoft'tan indirip kurar.
+  Bunun için internet bağlantısı gerekebilir.
+- Deskody'yi Başlat menüsünden açın. Simge saatin yanındaki gizli
+  simgeler (^ ok işareti) içinde bulunabilir.
+- Yönetici olarak çalıştırmanız normalde gerekmez. İlk testte VS Code,
+  tarayıcı ve Deskody'yi standart kullanıcı olarak açın.
+
+2. CHROME / EDGE EKLENTISINI KURUN
+
+- ZIP'ten çıkardığınız "Deskody-Bridge" klasörünü kalıcı bir yerde tutun.
+  Eklentiyi yükledikten sonra bu klasörü taşımayın veya silmeyin.
+- Chrome'da chrome://extensions adresini açın.
+  Edge kullanıyorsanız edge://extensions adresini açın.
+- "Geliştirici modu / Developer mode" seçeneğini açın.
+- "Paketlenmemiş öğe yükle / Load unpacked" düğmesine basın.
+- İçinde manifest.json bulunan "Deskody-Bridge" klasörünü seçin.
+- Deskody uygulamasında Ayarlar → Tarayıcı köprüsünü açın ve eşleştirme
+  anahtarını kopyalayın.
+- Eklentinin simgesine tıklayın veya Ayrıntılar → Uzantı seçenekleri
+  sayfasını açın; anahtarı yapıştırıp "Bağlantıyı kaydet"e basın.
+- Aynı tarayıcı profilinde music.youtube.com'u açın. Önceden açıksa
+  sekmeyi yenileyin. Hesabınıza giriş yapıp bir kez müzik çalın.
+- Deskody'de YouTube Music kaynağını seçin. Sekme/PWA açık kalmalı;
+  başka uygulamada çalışırken arka planda kalabilir.
+
+3. ILK KURAL
+
+- Kurallarım'da örneğin VS Code veya Not Defteri için bir kural ekleyin.
+- "Müziği çal" seçip erişiminiz olan bir YouTube Music bağlantısı girin.
+- Kuralı kaydedin ve "Akış kontrolü"nü açın.
+- Seçtiğiniz uygulamaya geçin; birkaç saniye içinde müzik değişmeli.
+- Sonuçları TEST-SONUCLARI.txt dosyasına yazabilirsiniz.
+
+SPOTIFY HAKKINDA MEVCUT SINIR
+
+Windows'ta açık Spotify masaüstü oturumunun çalma/duraklatma kontrolü
+Web API olmadan kullanılabilir. Ancak kuralla belirli Spotify şarkısı,
+albümü veya listesi başlatmak bu sürümde Spotify Web API bağlantısı
+(Premium ve Developer Client ID) gerektirir.
+Mac'teki yerel Spotify CLI çözümü Windows'a henüz uygulanmadı.
+API bağlantınız yoksa Spotify testinde müzik bağlantısını boş bırakın;
+mevcut parçanın çalma/duraklatma davranışını test edin. Spotify için
+Chrome eklentisi bu sınırlamayı kaldırmaz.
+
+SORUN OLURSA
+
+- Eklenti bağlanmıyorsa Deskody'nin çalıştığını, tarayıcı köprüsünün açık
+  olduğunu ve bu bilgisayardaki anahtarı kullandığınızı kontrol edin.
+- Aynı anda tek tarayıcı profiliyle eşleştirme yapın.
+- Pencereyi kapatmak uygulamadan çıkmak değildir; saat yanındaki menüden
+  çıkış yapabilirsiniz.
+- Uygulama açılmıyorsa hata metnini ve Windows sürümünü paylaşın.
+  WebView2 için resmi indirme: https://developer.microsoft.com/microsoft-edge/webview2/
+- Kurulumu kaldırmak için Windows Ayarları → Uygulamalar → Deskody.
+  Tarayıcı eklentisini chrome://extensions / edge://extensions üzerinden
+  ayrıca kaldırabilirsiniz.
+- Eşleştirme anahtarını, token'ları veya tüm ayar dosyanızı göndermeyin.
+  Ekran görüntülerinde özel sekme/dosya adlarını gizleyebilirsiniz.
+
+Bu bir test paketidir. Paketleme/derleme doğrulamaları yapılmıştır;
+gerçek Windows masaüstü, ses ve odak davranışını bu testte doğruluyoruz.

@@ -1,3 +1,19 @@
+# Windows test paketi — 0.1.11 / 2026-09-11
+
+- `dist-releases/Deskody-0.1.11-Windows-x64-test.zip` üretildi: 2.752.684 bayt. NSIS kurulum EXE'si, Deskody Bridge 0.1.6 Chromium klasörü, Türkçe kurulum ve test sonuç formu, build bilgisi ve SHA-256 listesi içerir. Toplam 14 dosya; kişisel ayar/eşleştirme dosyası yoktur.
+- Uygulama Mac üzerinde `x86_64-pc-windows-gnu` hedefi, MinGW-w64 ve Tauri'nin production/custom-protocol derlemesiyle üretildi. NSIS 3.11 paketlemesi başarılı. Windows runtime testi yapılmadı; bu paket arkadaş kabul testi içindir. Güncel Windows 10/11 x64 Intel/AMD hedeflenir.
+- Kurulum EXE'si 7-Zip ile açıldı. İçindeki `deskody.exe` ve `WebView2Loader.dll` derleme çıktılarıyla byte eşit ve her ikisinin PE machine alanı AMD64 olarak doğrulandı. Ana uygulama Windows GUI subsystem kullanır. Import listesinde WebView2Loader dışındaki bağımlılıklar Windows sistem/UCRT kitaplıklarıdır; ek MinGW runtime DLL gereksinimi görünmedi.
+- NSIS script'inde WebView2Loader kurulumu ve WebView2 runtime yoksa Microsoft bootstrapper indirme yolu doğrulandı. Kurulum imzasızdır. Gerçek Windows üzerinde SmartScreen, WebView2 indirme/kurma, tray, medya/odak ve kaldırma davranışları henüz test edilmedi.
+- ZIP CRC testi, tüm iç dosyaların SHA-256 karşılaştırması ve eklentinin kaynak paketle byte eşitliği başarılı. `scripts/run.mjs` CLI sürüm komutu, Node sözdizimi, Prettier ve `git diff --check` başarılı.
+- Önceki GitHub Windows job'u (run 34445696267) Rust/Clippy kontrollerini geçmiş, `.cmd` üzerinden Tauri başlatırken `"node" is not recognized` hatasıyla paketlemede durmuştu. `scripts/run.mjs` şimdi JavaScript giriş noktasını mevcut Node ile shell olmadan başlatır. Windows workflow'una test ZIP'i üretme/artifact adımı eklendi; bu yerel değişiklikler GitHub'a push edilmedi ve yeni CI koşusu başlatılmadı.
+- Windows Spotify URI başlatma bu sürümde Web API gerektirir. Mac Spotify CLI çözümü Windows'a aktarılmadı; paket rehberi bu sınırı açıkça belirtir.
+
+ZIP SHA-256: `4ad12b3b78a9ecc9720d06eb08f5ec4db239f3de2dee831a49513f1c78475060`
+
+Tekrar üretme: [WINDOWS-BUILD.md](WINDOWS-BUILD.md).
+
+---
+
 # Deskody doğrulama — 0.1.11 / 2026-09-10
 
 - Spotify 1.2.99.317’nin kendi `spotify_cli` aracı kullanılarak gerçek masaüstü oynatma doğrulandı. AppleScript `play track`/PCtx ve odak geri alma koruması kaldırıldı. Premium, Developer hesabı veya Spotify Web kullanılmadı.
