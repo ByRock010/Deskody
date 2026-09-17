@@ -43,6 +43,11 @@ void deskody_menu_result(const char *error) {
 @end
 
 static NSString *textValue(id value) { return [value isKindOfClass:NSString.class] ? value : @""; }
+static NSString *L(NSDictionary *snapshot, NSString *key) {
+    if ([snapshot[@"settings"][@"language"] isEqual:@"tr"]) return key;
+    NSString *value = textValue(snapshot[@"translations"][key]);
+    return value.length ? value : key;
+}
 static NSTextField *label(NSView *parent, NSString *text, NSRect frame, BOOL bold) {
     NSTextField *field = [NSTextField labelWithString:text ?: @""];
     field.frame = frame;
@@ -137,14 +142,14 @@ static NSString *matcherName(NSDictionary *matcher) {
     }];
     self.content = [[DeskodyMenuView alloc] initWithFrame:NSMakeRect(0, 0, 326, 280)];
     self.content.autoresizingMask = NSViewWidthSizable;
-    [self.content setAccessibilityLabel:@"Deskody hızlı kontrol"];
+    [self.content setAccessibilityLabel:L(self.snapshot, @"Deskody hızlı kontrol")];
     label(self.content, @"Deskody", NSMakeRect(14, 5, 290, 24), YES);
     self.flowIcon = icon(self.content, @"waveform.circle.fill", NSMakeRect(14, 41, 30, 30));
-    label(self.content, @"Akış kontrolü", NSMakeRect(53, 35, 204, 23), YES);
+    label(self.content, L(self.snapshot, @"Akış kontrolü"), NSMakeRect(53, 35, 204, 23), YES);
     self.context = label(self.content, @"", NSMakeRect(53, 58, 212, 17), NO);
     self.flow = [[NSSwitch alloc] initWithFrame:NSMakeRect(272, 42, 38, 24)];
     self.flow.target = self; self.flow.action = @selector(flowChanged:);
-    [self.flow setAccessibilityLabel:@"Akış kontrolü"];
+    [self.flow setAccessibilityLabel:L(self.snapshot, @"Akış kontrolü")];
     [self.content addSubview:self.flow];
     NSBox *divider = [[NSBox alloc] initWithFrame:NSMakeRect(14, 87, 298, 1)];
     divider.boxType = NSBoxSeparator; [self.content addSubview:divider];
@@ -156,14 +161,14 @@ static NSString *matcherName(NSDictionary *matcher) {
     self.play.bezelStyle = NSBezelStyleCircular;
     self.play.bordered = NO;
     [self.content addSubview:self.play];
-    self.resume = [NSButton buttonWithTitle:@"Otomasyona dön" target:self action:@selector(resumePressed:)];
+    self.resume = [NSButton buttonWithTitle:L(self.snapshot, @"Otomasyona dön") target:self action:@selector(resumePressed:)];
     self.resume.frame = NSMakeRect(48, 140, 210, 24);
     self.resume.bordered = NO;
     self.resume.image = symbol(@"arrow.counterclockwise");
     self.resume.imagePosition = NSImageLeading;
     self.resume.font = [NSFont systemFontOfSize:11];
     [self.content addSubview:self.resume];
-    self.rulesHeading = label(self.content, @"Kurallar", NSMakeRect(14, 174, 160, 23), YES);
+    self.rulesHeading = label(self.content, L(self.snapshot, @"Kurallar"), NSMakeRect(14, 174, 160, 23), YES);
     self.ruleCount = label(self.content, @"", NSMakeRect(206, 177, 105, 18), NO);
     self.ruleCount.alignment = NSTextAlignmentRight;
     CGFloat listHeight = MIN(240, MAX(36, rules.count * 48));
@@ -181,10 +186,10 @@ static NSString *matcherName(NSDictionary *matcher) {
         self.ruleLabels[rid] = label(list, matcherName(rule[@"matcher"]), NSMakeRect(53, y + 26, 212, 17), NO);
         DeskodyMenuSwitch *control = [[DeskodyMenuSwitch alloc] initWithFrame:NSMakeRect(272, y + 12, 38, 24)];
         control.ruleID = rid; control.target = self; control.action = @selector(ruleChanged:);
-        [control setAccessibilityLabel:[textValue(rule[@"name"]) stringByAppendingString:@" kuralı"]];
+        [control setAccessibilityLabel:[textValue(rule[@"name"]) stringByAppendingString:L(self.snapshot, @" kuralı")]];
         [list addSubview:control]; self.ruleSwitches[rid] = control;
     }
-    if (!rules.count) label(list, @"İlk kuralını Deskody’de oluştur.", NSMakeRect(14, 8, 294, 20), NO);
+    if (!rules.count) label(list, L(self.snapshot, @"İlk kuralını Deskody’de oluştur."), NSMakeRect(14, 8, 294, 20), NO);
     scroll.documentView = list;
     [self.content addSubview:scroll];
     self.errorLabel = label(self.content, @"", NSMakeRect(14, 208 + listHeight, 298, 32), NO);
@@ -192,12 +197,12 @@ static NSString *matcherName(NSDictionary *matcher) {
     self.errorLabel.textColor = NSColor.systemRedColor;
     self.content.frame = NSMakeRect(0, 0, 326, 208 + listHeight);
     [self.menu removeAllItems];
-    NSMenuItem *body = [[NSMenuItem alloc] initWithTitle:@"Deskody hızlı kontrol" action:nil keyEquivalent:@""];
+    NSMenuItem *body = [[NSMenuItem alloc] initWithTitle:L(self.snapshot, @"Deskody hızlı kontrol") action:nil keyEquivalent:@""];
     body.view = self.content; [self.menu addItem:body];
     [self.menu addItem:NSMenuItem.separatorItem];
-    [self.menu addItem:[self item:@"Deskody’yi aç…" action:@"open"]];
-    [self.menu addItem:[self item:@"Durumu yenile" action:@"refresh"]];
-    [self.menu addItem:[self item:@"Deskody’den çık" action:@"quit"]];
+    [self.menu addItem:[self item:L(self.snapshot, @"Deskody’yi aç…") action:@"open"]];
+    [self.menu addItem:[self item:L(self.snapshot, @"Durumu yenile") action:@"refresh"]];
+    [self.menu addItem:[self item:L(self.snapshot, @"Deskody’den çık") action:@"quit"]];
 }
 - (void)sync {
     [stateLock lock];
@@ -207,7 +212,9 @@ static NSString *matcherName(NSDictionary *matcher) {
     hasCompletion = NO;
     [stateLock unlock];
     if (completed) { self.busy = NO; self.localError = error; }
+    BOOL languageChanged = snapshot && ![textValue(self.snapshot[@"settings"][@"language"]) isEqual:textValue(snapshot[@"settings"][@"language"])];
     if (snapshot) self.snapshot = snapshot;
+    if (languageChanged && self.content) [self build];
     if (!self.content) return;
     NSDictionary *settings = self.snapshot[@"settings"] ?: @{};
     NSDictionary *status = self.snapshot[@"status"] ?: @{};
@@ -215,15 +222,15 @@ static NSString *matcherName(NSDictionary *matcher) {
     if (!self.busy) self.flow.state = enabled ? NSControlStateValueOn : NSControlStateValueOff;
     self.flow.enabled = !self.busy;
     self.flowIcon.contentTintColor = enabled ? NSColor.controlAccentColor : NSColor.secondaryLabelColor;
-    self.context.stringValue = enabled ? (textValue(status[@"context"][@"app"]).length ? textValue(status[@"context"][@"app"]) : @"Bağlam bekleniyor") : @"Kapalı · Müzik sende";
+    self.context.stringValue = enabled ? (textValue(status[@"context"][@"app"]).length ? textValue(status[@"context"][@"app"]) : L(self.snapshot, @"Bağlam bekleniyor")) : L(self.snapshot, @"Kapalı · Müzik sende");
     self.context.toolTip = self.context.stringValue;
     NSDictionary *player = [status[@"player"] isKindOfClass:NSDictionary.class] ? status[@"player"] : @{};
     BOOL playing = [player[@"playing"] isEqual:@YES];
-    self.track.stringValue = textValue(player[@"track"]).length ? player[@"track"] : @"Oynatıcı bekleniyor";
+    self.track.stringValue = textValue(player[@"track"]).length ? player[@"track"] : L(self.snapshot, @"Oynatıcı bekleniyor");
     self.track.toolTip = self.track.stringValue;
-    self.artist.stringValue = textValue(player[@"artist"]).length ? player[@"artist"] : (textValue(player[@"name"]).length ? player[@"name"] : @"Spotify veya YouTube Music’i aç");
+    self.artist.stringValue = textValue(player[@"artist"]).length ? player[@"artist"] : (textValue(player[@"name"]).length ? player[@"name"] : L(self.snapshot, @"Spotify veya YouTube Music’i aç"));
     self.play.image = symbol(playing ? @"pause.fill" : @"play.fill");
-    [self.play setAccessibilityLabel:playing ? @"Müziği duraklat" : @"Müziği çal"];
+    [self.play setAccessibilityLabel:playing ? L(self.snapshot, @"Müziği duraklat") : L(self.snapshot, @"Müziği çal")];
     self.play.toolTip = self.play.accessibilityLabel;
     self.play.enabled = !self.busy && [player[playing ? @"canPause" : @"canPlay"] boolValue];
     self.resume.hidden = ![status[@"manualOverride"] boolValue];
@@ -241,9 +248,9 @@ static NSString *matcherName(NSDictionary *matcher) {
         if (!self.busy) self.ruleSwitches[rid].state = on ? NSControlStateValueOn : NSControlStateValueOff;
         self.ruleSwitches[rid].enabled = !self.busy;
         BOOL active = enabled && on && [status[@"activeRule"] isEqual:rid];
-        self.ruleLabels[rid].stringValue = [NSString stringWithFormat:@"%@%@", active ? @"Şu anda · " : @"", matcherName(rule[@"matcher"])];
+        self.ruleLabels[rid].stringValue = [NSString stringWithFormat:@"%@%@", active ? L(self.snapshot, @"Şu anda · ") : @"", matcherName(rule[@"matcher"])];
     }
-    self.ruleCount.stringValue = [NSString stringWithFormat:@"%lu / %lu açık", (unsigned long)count, (unsigned long)[settings[@"rules"] count]];
+    self.ruleCount.stringValue = [NSString stringWithFormat:L(self.snapshot, @"%lu / %lu açık"), (unsigned long)count, (unsigned long)[settings[@"rules"] count]];
     NSString *message = self.localError ?: textValue(status[@"error"]);
     self.errorLabel.stringValue = message; self.errorLabel.toolTip = message;
     CGFloat height = NSMinY(self.errorLabel.frame) + (message.length ? 38 : 0);

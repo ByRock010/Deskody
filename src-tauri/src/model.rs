@@ -72,9 +72,19 @@ pub struct Rule {
     pub action: Action,
 }
 
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Language {
+    #[default]
+    En,
+    Tr,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Settings {
+    #[serde(default)]
+    pub language: Language,
     pub version: u32,
     pub enabled: bool,
     pub provider: Provider,
@@ -114,11 +124,11 @@ impl Default for Settings {
     fn default() -> Self {
         let mut rules = Vec::new();
         for (name, app) in [
-            ("Kodlama · VS Code", "Visual Studio Code"),
-            ("Kodlama · Terminal", "Terminal"),
-            ("Kodlama · Xcode", "Xcode"),
-            ("Kodlama · Windows Terminal", "WindowsTerminal"),
-            ("Kodlama · Linux", "code"),
+            ("Coding · VS Code", "Visual Studio Code"),
+            ("Coding · Terminal", "Terminal"),
+            ("Coding · Xcode", "Xcode"),
+            ("Coding · Windows Terminal", "WindowsTerminal"),
+            ("Coding · Linux", "code"),
         ] {
             rules.push(Rule {
                 id: uuid::Uuid::new_v4().to_string(),
@@ -131,7 +141,7 @@ impl Default for Settings {
         }
         rules.push(Rule {
             id: uuid::Uuid::new_v4().to_string(),
-            name: "Ders çalışma".into(),
+            name: "Study".into(),
             enabled: true,
             priority: 60,
             matcher: Matcher::FileExtension("pdf".into()),
@@ -139,6 +149,7 @@ impl Default for Settings {
         });
         Self {
             version: 1,
+            language: Language::En,
             enabled: false,
             provider: Provider::Spotify,
             spotify_web: false,
@@ -187,10 +198,22 @@ pub struct Player {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct PlaybackActivity {
+    pub app: String,
+    pub reason: String,
+    pub rule_name: bool,
+    pub player: String,
+    pub action: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Activity {
     pub time: u64,
     pub message: String,
     pub level: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playback: Option<PlaybackActivity>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]

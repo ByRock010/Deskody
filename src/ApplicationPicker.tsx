@@ -1,3 +1,4 @@
+import { t, useLanguage } from "./i18n";
 import { useEffect, useState } from "react";
 import { Monitor, RefreshCw, Search, X } from "lucide-react";
 import { api } from "./bridge";
@@ -36,6 +37,7 @@ export function ApplicationPicker({
   onChange: (apps: InstalledApplication[]) => void;
   lastApp?: Context | null;
 }) {
+  const language = useLanguage();
   const [apps, setApps] = useState<InstalledApplication[]>([]);
   const [query, setQuery] = useState("");
   const [manual, setManual] = useState("");
@@ -73,11 +75,11 @@ export function ApplicationPicker({
   }
   function add(app: InstalledApplication) {
     if (!validApplication(app)) {
-      setManualError("Geçerli bir uygulama adı veya kimliği girin.");
+      setManualError(t("Geçerli bir uygulama adı veya kimliği girin."));
       return;
     }
     if (selected.length >= 64) {
-      setManualError("En fazla 64 uygulama seçebilirsin.");
+      setManualError(t("En fazla 64 uygulama seçebilirsin."));
       return;
     }
     if (!selected.some((s) => same(s, app))) update([...selected, app]);
@@ -86,18 +88,20 @@ export function ApplicationPicker({
   }
   const visible = apps.filter((app) =>
     `${app.name} ${app.id}`
-      .toLocaleLowerCase()
-      .includes(query.toLocaleLowerCase().trim()),
+      .toLocaleLowerCase(language)
+      .includes(query.toLocaleLowerCase(language).trim()),
   );
   return (
-    <section className="application-picker" aria-label="Uygulama seçimi">
+    <section className="application-picker" aria-label={t("Uygulama seçimi")}>
       <div className="application-heading">
-        <strong>Uygulamalar</strong>
-        <span aria-live="polite">{selected.length} seçili</span>
+        <strong>{t("Uygulamalar")}</strong>
+        <span aria-live="polite">
+          {selected.length} {t("seçili")}
+        </span>
         <button
           type="button"
           className="icon-button"
-          aria-label="Uygulama listesini yenile"
+          aria-label={t("Uygulama listesini yenile")}
           disabled={loading}
           onClick={() => setRevision((r) => r + 1)}
         >
@@ -105,15 +109,21 @@ export function ApplicationPicker({
         </button>
       </div>
       <p className="application-hint">
-        Seçtiğin uygulamalardan herhangi biri aktifken bu kural çalışır.
+        {" "}
+        {t(
+          "Seçtiğin uygulamalardan herhangi biri aktifken bu kural çalışır.",
+        )}{" "}
       </p>
       {selected.length > 0 && (
-        <div className="application-chips" aria-label="Seçilen uygulamalar">
+        <div
+          className="application-chips"
+          aria-label={t("Seçilen uygulamalar")}
+        >
           {selected.map((app) => (
             <button
               key={app.id}
               type="button"
-              aria-label={`${app.name} seçimini kaldır`}
+              aria-label={t("{} seçimini kaldır", app.name)}
               onClick={() => update(selected.filter((a) => a.id !== app.id))}
             >
               {apps.find((a) => same(app, a))?.name || app.name}
@@ -126,25 +136,26 @@ export function ApplicationPicker({
         <Search size={17} />
         <input
           type="search"
-          aria-label="Uygulamalarda ara"
-          placeholder="Uygulama ara…"
+          aria-label={t("Uygulamalarda ara")}
+          placeholder={t("Uygulama ara…")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       </label>
       {loading ? (
         <p role="status" className="application-hint">
-          Uygulamalar bulunuyor…
+          {" "}
+          {t("Uygulamalar bulunuyor…")}{" "}
         </p>
       ) : error ? (
         <p role="status" className="application-hint">
-          {error}
+          {t(error)}
         </p>
       ) : (
         <div
           className="application-list"
           role="group"
-          aria-label="Bilgisayardaki uygulamalar"
+          aria-label={t("Bilgisayardaki uygulamalar")}
         >
           {visible.map((app) => {
             const checked = selected.some((s) => same(s, app));
@@ -176,8 +187,10 @@ export function ApplicationPicker({
           {!visible.length && (
             <p className="application-hint">
               {apps.length
-                ? "Aramana uygun uygulama bulunamadı."
-                : "Bu konumlarda uygulama bulunamadı. Listeyi yenileyebilir veya aşağıdan ekleyebilirsin."}
+                ? t("Aramana uygun uygulama bulunamadı.")
+                : t(
+                    "Bu konumlarda uygulama bulunamadı. Listeyi yenileyebilir veya aşağıdan ekleyebilirsin.",
+                  )}
             </p>
           )}
         </div>
@@ -194,15 +207,16 @@ export function ApplicationPicker({
             })
           }
         >
-          Son kullanılanı ekle: {lastApp.app}
+          {" "}
+          {t("Son kullanılanı ekle:")} {lastApp.app}
         </button>
       )}
       <details className="application-manual">
-        <summary>Listede olmayan bir uygulama ekle</summary>
+        <summary>{t("Listede olmayan bir uygulama ekle")}</summary>
         <div className="application-manual-row">
           <input
-            aria-label="Uygulama adı veya kimliği"
-            placeholder="Uygulama adı veya kimliği"
+            aria-label={t("Uygulama adı veya kimliği")}
+            placeholder={t("Uygulama adı veya kimliği")}
             maxLength={300}
             value={manual}
             onChange={(e) => setManual(e.target.value)}
@@ -228,13 +242,14 @@ export function ApplicationPicker({
               })
             }
           >
-            Ekle
+            {" "}
+            {t("Ekle")}{" "}
           </button>
         </div>
       </details>
       {manualError && (
         <p className="form-error" role="alert">
-          {manualError}
+          {t(manualError)}
         </p>
       )}
     </section>

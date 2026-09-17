@@ -1,167 +1,198 @@
 # Deskody
 
-Tauri v2 + Rust + React/TypeScript ile geliştirilmiş, macOS öncelikli menü çubuğu uygulaması. Aktif uygulama, dosya ve tarayıcı bağlamından müzik kuralları üretir. Pencereyi kapatmak uygulamayı gizler; menü çubuğundaki **Çıkış** tamamen kapatır.
+**English** | [Türkçe](README.tr.md)
 
-## Çalıştırma
+Music that follows your focus. Deskody is a macOS-first menu bar app built with Tauri v2, Rust and React/TypeScript, with Windows and Linux adapters. It follows your active application, document or browser tab and applies your music rules. Closing the main window keeps Deskody running; **Quit** in the menu bar exits it.
 
-Gerekenler: Node.js 22+, Rust 1.91+, işletim sisteminiz için [Tauri önkoşulları](https://v2.tauri.app/start/prerequisites/).
+## Language
+
+Deskody starts in **English** by default, independently of the operating system language. Choose **Settings → Language → App language → Türkçe** to use Turkish. In Turkish, the same setting is **Ayarlar → Dil → Uygulama dili**.
+
+Your choice is saved immediately and remembered across restarts. The main window and quick controls update together. Changing language does not interrupt music or save unrelated unfinished settings. User-created rule names, application names and track metadata stay as entered. Settings from older versions without a language preference default to English and retain existing rules.
+
+The **English / Türkçe** links above switch between the two README files on GitHub.
+
+## Development
+
+Requirements: Node.js 22+, Rust 1.91+, and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system.
 
 ```sh
 npm ci
 npm run desktop
 ```
 
-Yalnızca arayüzü görmek için `npm run dev`. Web önizlemesi müzik kontrol etmez; taslak kuralları kendi `localStorage` alanına kaydeder.
+Use `npm run dev` for a browser-only UI preview. The preview cannot control music; it stores draft settings in its own `localStorage`.
 
-`scripts/run.mjs`, standart Rust kurulumunu PATH'te bulur. macOS'ta kurulu Command Line Tools'u kullanır; açıkça verilen `DEVELOPER_DIR` değerine dokunmaz. Projede `.tools/cargo` önbelleği varsa kullanır; temiz kurulumlarda normal Cargo önbelleği geçerlidir.
+`scripts/run.mjs` finds the standard Rust installation on PATH. On macOS it uses the installed Command Line Tools, respecting an explicit `DEVELOPER_DIR`. It uses `.tools/cargo` when that project cache exists; fresh installations use the normal Cargo cache.
 
-## İlk kullanım
+## Getting started
 
-1. Spotify masaüstü uygulamasını açıp bir parça seçin.
-2. **Ayarlar → Sistem izinleri** bölümünden macOS Erişilebilirlik iznini verin. Spotify/tarayıcı erişiminde macOS Automation onayını tamamlayın. İzin değişince **Yenile** düğmesini kullanın. macOS bazen uygulamanın yeniden açılmasını ister.
-3. **Kurallarım** bölümünde uygulama veya dosya bağlamını, eylemi ve isteğe bağlı müzik bağlantısını seçin. **Kuralı uygula** doğrudan kaydeder ve çalışan motora iletir. Kural anahtarları ve silme işlemi de doğrudan kaydedilir. Genel ayarlar ve içe aktarma için **Değişiklikleri kaydet** kullanılır.
-4. **Genel bakış** ekranındaki otomasyonu açın. Varsayılan olarak kapalıdır.
+1. Open the Spotify desktop app, sign in and select a track, or set up YouTube Music using the browser extension below.
+2. Open **Settings → System permissions** and grant macOS Accessibility access. Approve Automation requests for the selected player/browser. Refresh after changing permissions; macOS may require restarting Deskody.
+3. In **My rules**, choose the applications or document/browser condition, action and optional music link. **Apply rule** saves immediately. Rule switches and deletion also save immediately; general settings and imported rules use **Save changes**.
+4. Enable automation in **Overview** or the menu bar. It is off by default.
 
-Boş liste alanı mevcut müziği devam ettirir. PDF, VS Code, Terminal, Xcode ve Windows Terminal kuralları hazır gelir; kendi listelerinizi eşleştirin. Kural uygulama alanında yerel uygulama adı veya tam uygulama kimliği kullanabilirsiniz.
+An empty music link resumes the selected player's current music. Starter rules cover PDF documents, VS Code, Terminal, Xcode and Windows Terminal. Match your own playlists to these rules or create new ones.
 
-macOS'taki `Code` / `com.microsoft.VSCode`, Windows'taki `Code.exe` ve Linux'taki `code`, `Visual Studio Code` koşuluyla eşleşir. **Kural durumu** alanı son çalışma uygulamasını, kimliğini, dosya/sekme bilgisini, kontrol edilen oynatıcıyı ve son kural olayını gösterir. Düzenleyicide **Son algılanan uygulamayı kullan** ile kesin uygulama kimliğini alabilirsiniz. Bu tanılama verileri yalnızca bellekte tutulur.
+**Music link** accepts Spotify tracks, playlists and albums, plus YouTube Music songs, playlists, radio and mixes. Links are only used with their matching music source. Deskody controls the selected player; it does not silently switch to YouTube Music when Spotify is closed.
 
-**Müzik bağlantısı** alanı Spotify şarkı/liste/albüm ve YouTube Music şarkı/liste/radyo/mix bağlantılarını kabul eder. **Diğer oynatıcılar** listesinden Spotify seçilirse de Spotify liste komutları uygulanır; YouTube Music veya Apple Music seçiliyken Spotify bağlantıları korunur ve mevcut müzik kontrol edilir. Otomasyon yalnızca seçili oynatıcıya komut verir; Spotify kapalıyken açık YouTube Music'e kendiliğinden geçmez.
+The rule status area shows the latest work application, its identifier, document/tab details, controlled player and last rule event. This diagnostic context stays in memory. VS Code aliases such as `Code`, `Code.exe` and `com.microsoft.VSCode` are recognized.
 
-## Platform yetenekleri
+### Select multiple applications
 
-| Yetenek                | macOS                                    | Windows                             | Linux                                    |
-| ---------------------- | ---------------------------------------- | ----------------------------------- | ---------------------------------------- |
-| Aktif uygulama/pencere | NSWorkspace + AX                         | Win32 + UIAutomation                | X11/EWMH, Sway, Hyprland                 |
-| Tarayıcı URL'si        | Safari/Chromium JXA; eklenti alternatifi | UIAutomation; eklenti alternatifi   | Eklenti                                  |
-| Spotify play/pause     | AppleScript/JXA                          | GSMTC                               | MPRIS                                    |
-| Spotify liste başlatma | Spotify’ın yerel CLI aracı veya Web API | **Web API gerekir**                 | MPRIS OpenUri desteklenirse veya Web API |
-| Diğer oynatıcılar      | Apple Music; eklentili YouTube Music     | Seçili GSMTC oturumu; eklentili YTM | Seçili MPRIS oturumu; eklentili YTM      |
-| Ses geçişleri          | Spotify/Apple Music ses seviyesi         | Spotify WASAPI oturumu              | MPRIS Volume desteklenirse               |
-| Diğer medya algılama   | macOS 14.2+ CoreAudio çıkış süreçleri    | WASAPI peak meter + GSMTC           | MPRIS oynatma durumu                     |
-| Manuel medya tuşu      | CGEvent sistem medya olayı               | SendInput                           | X11 XTest; Wayland'da kısıtlı            |
+In the rule editor, choose **Applications**, search the installed applications and select one or more checkboxes. A rule for **Visual Studio Code + Preview** uses the same music in both. Switching between selected applications does not restart an unchanged playlist. Pause rules and other-media interruptions keep their priority.
 
-Tarayıcı eklentisi tüm platformlarda diğer sekmelerin `audible` durumunu ve YouTube Music oynatıcısını okuyabilir. Genel medya tuşu **yalnızca açık kullanıcı komutuyla** gönderilir: hedefi ve oynatma durumu belirsiz olan bir toggle, otonom pause yerine kullanılmaz.
+The application catalogue is read when opening or refreshing the picker, without launching applications or requesting additional Accessibility/Admin access:
 
-### Gerçek platform sınırları
+- macOS: bundles in `/Applications`, `/System/Applications` and `~/Applications`.
+- Windows: Start menu executable shortcuts and App Paths.
+- Linux: XDG `.desktop` entries.
 
-- Genel Wayland standardı, tüm uygulamalar için aktif pencere/URL okumaya izin vermez. Sway/Hyprland adaptörleri var; GNOME/KDE Wayland'da uygulama kuralları desteklenmez. Eklentiyle odaktaki tarayıcı kuralları kullanılabilir. XWayland verisi, tüm Wayland pencerelerini temsil ediyormuş gibi kullanılmaz.
-- macOS 12–14.1'de genel CoreAudio süreç algılaması yoktur. macOS 14.2+ için `IsRunningOutput`, gerçek duyulabilirlik garantisi değildir; sessiz fakat açık akışları da sayabilir. Ses örnekleri kaydedilmez.
-- Linux'ta MPRIS dışındaki ham sistem sesi ölçülmez. Windows WASAPI kontrolü varsayılan multimedya çıkışını tarar; farklı çıkış cihazları üzerinden çalan MPRIS/GSMTC dışı sesler kaçabilir.
-- Eklentili YTM seçildiğinde yerel tarayıcı ses oturumları kendini kesmemesi için dışlanır; tarayıcı içi diğer ses için eklenti kullanılır. Aynı anda tek eşleştirilmiş tarayıcı profili desteklenir. Birden fazla YTM sekmesi varsa ilk seçilen/çalan sekme korunur.
-- Ses geçişinin süresi hedef değerdir. AppleScript, D-Bus, tarayıcı ve ağ gecikmeleri bunu uzatabilir. Sistem ana sesi değiştirilmez. Desteklenmeyen oynatıcılarda doğrudan play/pause uygulanır.
-- `MPRemoteCommandCenter`, başka uygulamaları yöneten genel bir denetleyici değildir; uygulamanızın uzaktan medya komutlarını alması içindir. Bu nedenle üçüncü taraf kontrolünde kullanılmaz. [Apple açıklaması](https://developer.apple.com/documentation/mediaplayer/remote-command-center-events)
-- Windows yönetici izni istemez. Yükseltilmiş uygulamaların UIAutomation ağacına erişim Windows tarafından sınırlandırılabilir.
-- Buradaki **odak modu**, müzik otomasyonu durumudur. İşletim sisteminin bildirim/DND ayarını değiştirmez; bu özellik platformlar arasında ortak bir API'ye sahip değildir.
+Portable programs outside standard locations and some Windows Store applications may be missing. Add the last detected application or enter an identifier manually. Rules support 1–64 selected applications; missing/uninstalled applications are not automatically removed from existing rules. Legacy single-application rules remain supported.
 
-## Spotify masaüstü — arka planda oynatma (0.1.11)
+## Quick controls
 
-Mac’te Spotify şarkı, liste ve albüm bağlantıları artık kurallarda kullanılabilir. Paylaşım bağlantısındaki `?si=...` kısmını silmeniz gerekmez. Spotify masaüstü uygulaması açık ve hesabınıza giriş yapılmış olmalı; bu yerel yol için Premium, Developer Client ID veya tarayıcı eklentisi gerekmez.
+On macOS, Deskody uses a native **NSStatusItem → NSMenu**. macOS supplies the background, glass/transparency, light/dark appearance, shadow, status icon highlight and fullscreen menu bar behavior. Controls use `NSSwitch`, SF Symbols, system fonts and semantic colors. The main app's green theme is not applied to this menu. macOS 26 uses its current native menu appearance; earlier versions use theirs.
 
-İçerik başlatmak için açık Spotify uygulamasının kendi paketindeki `spotify_cli` kullanılır. Önce bu Mac’in Spotify oturumu doğrulanır; başka cihaz aktifse oynatma bu Mac’e aktarılır ve ardından şarkı/liste/albüm başlatılır. Önceki AppleScript `play track` ve odak geri alma kodu kaldırıldı. Normal ve tam ekran pencerelerde Spotify’ın hiç aktive olmaması canlı testin kabul koşuludur.
+Toggle automation or individual rules, play/pause, return to automation after manually pausing, inspect errors, refresh or quit without opening the main window. Turning automation off leaves current music playing. Rule changes made while it is off are saved for later. Long rule lists scroll inside the menu. **Open Deskody** opens the main app explicitly.
 
-Spotify güncel olmalı ve paketinde bu kontrol aracı bulunmalı (doğrulanan istemci: 1.2.99.317). Eski sürümlerde pencereyi öne getiren bir yedek yöntem çalıştırılmaz; Spotify’ı güncelleme hatası gösterilir. Duraklatma, devam etme ve ses ayarı mevcut AppleScript kontrolünü kullanır. Spotify’ın kendi hesap/reklam/içerik kısıtları geçerlidir. [Araştırma, uygulama ayrıntıları ve test sınırları](docs/SPOTIFY.md).
+The macOS menu works in other Spaces and over fullscreen applications without activating Deskody. If the menu bar is hidden, move the pointer to the top of the screen. No webview is created for macOS quick controls. Windows and Linux use the React quick panel; Linux opens it from the tray menu's **Quick controls** item because tray click events are unavailable there. See [Tauri tray behavior](https://v2.tauri.app/learn/system-tray/).
 
-## Spotify Web API (isteğe bağlı)
+The main window opens on first installation. With saved settings, later launches start in the menu bar. Reopening the app from Finder brings up the main window. Quick changes synchronize with the main window while preserving unrelated unsaved edits; opening Deskody does not replace the last external work context.
 
-macOS yerel kontrolünde gerekli değildir. Windows'ta belirli bir listeyi başlatmak için kullanın; GSMTC mevcut oturumu kontrol eder, playlist seçimi sunmaz.
+## Platform capabilities
 
-1. Spotify Developer Dashboard'da uygulama oluşturun; hesabın ve Developer uygulamasının erişim koşullarını sağlayın.
-2. Redirect URI'yi **tam olarak** `http://127.0.0.1:43828/callback` ekleyin.
-3. Ayarlarda **Spotify Web API** seçeneğini açın, Client ID'yi girip kaydedin. Client secret kullanılmaz.
-4. **Spotify hesabını bağla** düğmesine basın. Sistem tarayıcısında yetkilendirin.
-5. Cihaz listesinden bu bilgisayarın Spotify cihazını seçip kaydedin. Cihazın Spotify'da görünmesi için önce bir parça çalın.
+| Capability | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| Active application/window | NSWorkspace + AX | Win32 + UIAutomation | X11/EWMH, Sway, Hyprland |
+| Browser URL | Safari/Chromium JXA or extension | UIAutomation or extension | Extension |
+| Spotify play/pause | AppleScript/JXA | GSMTC | MPRIS |
+| Start Spotify content | Spotify's bundled CLI or Web API | **Web API required** | MPRIS OpenUri when supported, or Web API |
+| Other players | Apple Music; YouTube Music extension | Selected GSMTC session; YTM extension | Selected MPRIS session; YTM extension |
+| Volume fades | Spotify/Apple Music player volume | Spotify WASAPI session | MPRIS Volume when supported |
+| Other media detection | CoreAudio output processes on macOS 14.2+ | WASAPI peak meter + GSMTC | MPRIS playback state |
+| Manual media key | CGEvent system media event | SendInput | X11 XTest; limited on Wayland |
 
-PKCE S256, rastgele OAuth state, iki dakikalık tek oturumlu loopback callback, HTTPS, refresh token yenileme ve 429 `Retry-After` beklemesi uygulanır. Token'lar macOS Keychain / Windows Credential Manager / Linux Secret Service'te saklanır; IPC'ye veya ayar JSON'una verilmez. Linux'ta GNOME Keyring/KWallet gibi açık bir Secret Service gerekir. **Bağlantıyı kaldır** yerel kimliği siler; Spotify hesabındaki uygulama yetkisini ayrıca Spotify hesabınızdan kaldırabilirsiniz.
+The browser extension detects other audible tabs and YouTube Music playback on all platforms. A global media toggle is sent **only by an explicit user command**, never as an autonomous pause with an unknown target/state.
 
-Spotify oynatma Web API'si Premium ve ilgili uygulama erişimini gerektirir. OAuth gerçek hesapla bağlanmadan ağ/hesap uçtan uca testi yapılamaz. [PKCE akışı](https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow), [oynatma API'si](https://developer.spotify.com/documentation/web-api/reference/start-a-users-playback), [redirect kuralları](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri).
+### Platform limits
 
-## Tarayıcı eklentisi
+- Generic Wayland does not expose all active windows/URLs. Sway and Hyprland adapters are provided; application rules are unavailable on GNOME/KDE Wayland. Foreground browser rules can use the extension. XWayland data is not treated as a complete view of Wayland windows.
+- macOS 12–14.1 lacks general CoreAudio process detection. On 14.2+, `IsRunningOutput` may include silent open streams; it does not guarantee audible sound. Audio samples are not recorded.
+- Linux does not meter raw non-MPRIS system audio. Windows WASAPI checks the default multimedia output; non-GSMTC audio on another device may be missed.
+- When the YTM extension player is selected, native browser audio sessions are excluded to avoid interrupting itself. The extension detects other audible browser tabs. One paired browser profile is supported at a time; with multiple YTM tabs, the first selected/playing one is retained.
+- Fade duration is a target, subject to AppleScript, D-Bus, browser and network latency. System master volume is never changed. Unsupported players receive direct play/pause.
+- `MPRemoteCommandCenter` receives commands for your own application; it is not a general controller for other apps. See [Apple's documentation](https://developer.apple.com/documentation/mediaplayer/remote-command-center-events).
+- Deskody does not require Windows administrator access. Windows may restrict UIAutomation access to elevated applications.
+- “Focus” refers to music automation, not the OS notification/Do Not Disturb setting.
+
+## Spotify desktop playback
+
+On macOS, Spotify track, playlist and album links work without Premium, a Developer Client ID or an extension. Shared `?si=...` parameters are accepted. Spotify must already be running and signed in.
+
+Deskody starts content using the running Spotify app's bundled `spotify_cli`. It identifies the local Spotify session, transfers playback to this Mac if another device is active, then starts the requested content. It does not use the older AppleScript `play track` command or focus-restoration workarounds. Pause, resume and volume still use AppleScript.
+
+Spotify must be up to date and include this helper (verified client: 1.2.99.317). If unavailable, Deskody asks you to update Spotify instead of falling back to a method that activates its window. Spotify's account, advertising and content restrictions still apply. See [implementation research and test limits](docs/SPOTIFY.md).
+
+### Optional Spotify Web API
+
+Not needed for native macOS playback. On Windows, use it to start a specific track/playlist/album: GSMTC controls the existing session but cannot select content.
+
+1. Create a Spotify Developer application and meet its account/application access requirements.
+2. Register exactly `http://127.0.0.1:43828/callback` as the redirect URI.
+3. Enable **Spotify Web API** in Settings, enter the Client ID and save. No client secret is used.
+4. Connect your Spotify account and authorize in the system browser.
+5. Select and save this computer's Spotify device. Play a track first if the device is missing.
+
+The implementation uses PKCE S256, random OAuth state, a single two-minute loopback callback, HTTPS, token refresh and HTTP 429 `Retry-After`. Tokens are stored in macOS Keychain / Windows Credential Manager / Linux Secret Service, never in settings JSON or IPC. Linux needs an unlocked Secret Service such as GNOME Keyring/KWallet. Disconnecting removes local credentials; revoke account-side access separately in Spotify if needed.
+
+Spotify's playback Web API requires Premium and application access. Real account/network testing requires authorization. References: [PKCE](https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow), [playback API](https://developer.spotify.com/documentation/web-api/reference/start-a-users-playback), [redirect URI rules](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri).
+
+## Browser extension and YouTube Music
 
 ```sh
 npm run extension:build
 ```
 
-- Chrome/Edge/Brave: `chrome://extensions` → Geliştirici modu → Paketlenmemiş öğe yükle → `dist-extensions/chromium`.
-- Firefox: `about:debugging#/runtime/this-firefox` → Geçici eklenti yükle → `dist-extensions/firefox/manifest.json`. Kalıcı dağıtım için Mozilla imzası gerekir.
-- Masaüstünde **Tarayıcı köprüsü** ayarını açıp kaydedin. **Eşleştirme anahtarını göster** ile anahtarı eklenti seçeneklerine kopyalayın.
-- YouTube Music için `music.youtube.com` sayfasını yenileyin, ilk parçayı elle başlatın ve uygulamada **Diğer oynatıcılar → YouTube Music · tarayıcı eklentisi** seçin. Bu oynatıcı mevcut müziği yönetir ve **Müzik bağlantısı** alanına girilen YouTube Music içeriğini açar.
+- Chrome/Edge/Brave: `chrome://extensions` → Developer mode → Load unpacked → `dist-extensions/chromium`.
+- Firefox: `about:debugging#/runtime/this-firefox` → Load Temporary Add-on → `dist-extensions/firefox/manifest.json`. Persistent distribution needs Mozilla signing.
+- Enable and save **Browser bridge** in Deskody. Reveal the pairing key and copy it into the extension options.
+- Refresh `music.youtube.com`, manually play once, then choose **Other players → YouTube Music · browser extension** in Deskody.
 
-Eklenti `tabs`, `storage`, `alarms` ve yerel sunucu erişimi kullanır. HTTP(S) sayfalarındaki küçük heartbeat script'i sayfa içeriğini okumadan MV3 bağlantısını canlı tutar. `music.js` yalnızca music.youtube.com üzerinde medya elementine erişir. Algılanan bağlamdan gizli sekmeler, URL sorguları, fragment'ler ve tarayıcı geçmişi gönderilmez. Kullanıcının kurala yazdığı oynatma bağlantısı ayrı bir komut olarak, yalnızca gerekli oynatma parametreleriyle (`v`, `list`, `start_radio`, `index`, `params`) eklentiye iletilir. Sistem sesi kaydedilmez.
+Paste a YouTube Music link into a rule, for example:
 
-Köprü yalnızca `127.0.0.1:43827` dinler. İstekler 16 KiB ile sınırlıdır; Host, Origin ve sabit zamanda Bearer anahtarı kontrol edilir. Eski bağlam sekiz saniye sonra geçersizdir. Web sayfalarına CORS izni verilmez. Anahtar kullanıcıya özel izinlerle diskte tutulur; aynı kullanıcı yetkisine sahip zararlı süreçlere karşı işletim sistemi izolasyonunun yerini almaz.
+```text
+https://music.youtube.com/watch?v=LkoXilp7FPY&list=PLDRwTTP8arJ9NSwCujKB7dYA_2fVCNnDg
+https://music.youtube.com/watch?v=LkoXilp7FPY
+https://music.youtube.com/playlist?list=PLDRwTTP8arJ9NSwCujKB7dYA_2fVCNnDg
+https://music.youtube.com/watch?v=LkoXilp7FPY&start_radio=1
+```
 
-### Uygulama seçimi ve ortak kurallar (masaüstü 0.1.5)
+Playlist, mix and radio ordering is determined by YouTube Music. Deskody uses the existing tab/PWA and its in-page navigation without bringing it forward or triggering “Leave app?” by replacing the page. Volume transitions and playback verification use the media element's elapsed time. On failure, volume is restored; an acknowledgement timeout does not automatically pause an already playing track. Explicit cancellation stops a pending operation.
 
-Kural düzenleyicisinde **Şu bağlamda → Uygulamalar** seçin. Bilgisayardaki uygulamalar alfabetik listelenir; arama alanıyla bulup birden fazla kutucuğu işaretleyin. Örneğin **Visual Studio Code + Preview** seçildiğinde aynı kural ve müzik bağlantısı ikisinde de geçerlidir. Seçili uygulamalar arasında geçiş yapmak aynı playlist'i baştan açmaz. Duraklatma kuralları ve diğer medya kesicileri önceliklerini korur.
+A content command waits up to 16 seconds for acknowledgement. New playback/settings/quit commands cancel a pending transition; changing only the display language does not. New context scanning resumes after the transition. If autoplay is blocked, manually play once and retry. YouTube Music DOM changes may require updating playlist-page extraction; direct `watch` links avoid that step.
 
-Liste yalnızca düzenleyici açıldığında veya yenile düğmesine basıldığında okunur; uygulamaları açmaz ve ek Accessibility/Admin izni istemez. macOS `/Applications`, `/System/Applications` ve `~/Applications` içindeki bundle kimlikleri; Windows Başlat menüsü EXE kısayolları/App Paths; Linux XDG `.desktop` kayıtları kullanılır. Standart konumlar dışındaki taşınabilir programlar ve bazı Windows Store uygulamaları listelenmeyebilir. **Son kullanılanı ekle** veya **Listede olmayan bir uygulama ekle** seçenekleri korunur.
+After updating extension files, click **Reload** in the browser extension manager and refresh the YTM tab/PWA. Pairing is retained. You do not need to change the macOS language or Apple Events JavaScript settings.
 
-Mevcut tek uygulamalı kurallar aynen okunur. Çoklu seçimde 1–64 uygulama saklanabilir; kaldırılmış bir uygulama mevcut kuraldan otomatik silinmez. Tarayıcı eklentisi 0.1.4 bu masaüstü sürümüyle uyumludur; eklenti güncellemesi gerekmez.
+### Bridge privacy
 
-### YouTube Music bağlantıları (uygulama ve eklenti 0.1.4)
+The extension uses `tabs`, `storage`, `alarms` and loopback access. A small HTTP(S) heartbeat script keeps MV3 connectivity alive without reading page content. `music.js` accesses media only on `music.youtube.com`. Incognito tabs, URL queries/fragments and browsing history are not sent as detected context. User-provided playback links are separate commands with only necessary parameters (`v`, `list`, `start_radio`, `index`, `params`). System audio is not recorded.
 
-Uygulama ve tarayıcı eklentisi en az 0.1.4 olmalı. Eklentiyi yüklediğiniz dizinin dosyaları güncellendikten sonra `chrome://extensions` üzerindeki **Yeniden yükle** düğmesine basın; açık YouTube Music sekmesini/PWA penceresini de yenileyin. Eşleştirme anahtarı değişmez. İngilizce Chrome arayüzünde düğme **Reload** olarak görünür; macOS dilini veya Apple Events JavaScript ayarını değiştirmek gerekmez. Eski sürüm sesi sıfırda bırakmışsa YouTube Music sesini bir kez istediğiniz seviyeye getirin; yeni sürüm bu seviyeyi korur.
+The bridge listens only on `127.0.0.1:43827`. Requests are limited to 16 KiB; Host, Origin and constant-time Bearer authentication are checked. Context expires after eight seconds. Web pages receive no CORS access. The pairing key has user-only file permissions, which are not a substitute for OS isolation against malicious processes running as the same user.
 
-**Ayarlar → Diğer oynatıcılar → YouTube Music** seçin. Kural düzenleyicisindeki **Müzik bağlantısı** alanına aşağıdakilerden birini yapıştırıp **Kuralı uygula** düğmesine basın:
+## Packaging
 
-- Şarkı ve liste: `https://music.youtube.com/watch?v=LkoXilp7FPY&list=PLDRwTTP8arJ9NSwCujKB7dYA_2fVCNnDg`
-- Yalnızca şarkı: `https://music.youtube.com/watch?v=LkoXilp7FPY`
-- Liste: `https://music.youtube.com/playlist?list=PLDRwTTP8arJ9NSwCujKB7dYA_2fVCNnDg`
-- Radyo/mix: YouTube Music'te açılan radyo veya mix'in `watch?v=…&list=…` bağlantısını kullanın; varsa `start_radio=1` korunur.
-
-Mevcut YouTube Music sekmesinde sayfa içi (`yt-navigate`) yönlendirme kullanılır. Otomatik geçişlerde sayfa yeniden yüklenmez, pencere/sekme öne getirilmez ve `beforeunload` / “Leave app?” koruması tetiklenmez veya devre dışı bırakılmaz. Sayfa içi yönlendirme hazır değilse hata gösterilir; tam sayfa açmaya geri dönülmez. Liste sayfasında istenen listedeki ilk şarkının bağlantısı açılır; oynatma başlamadan başarı onayı verilmez. Aynı hedef her taramada yeniden açılmaz. Ses geçişi eklentide tek işlem olarak yapılır; Rust ayrıca sesi sıfırlamaz ve sekme sessize alınmaz. Oynatıcı kimliği ve ilerleyen oynatma süresi kontrol edilir; adres çubuğundaki liste parametresinin birebir eşit olması gerekmez. Doğrulama zaman aşımında çalan parça duraklatılmaz ve önceki ses/mute ayarı geri yüklenir. Kullanıcının açık iptal/durdurma komutu ise çalmayı durdurur. Hedef, eşleştirilen hesabın erişebildiği bir içerik olmalı. Otomatik oynatma engellenirse hata görünür; sayfada bir kez Çal'a basıp tekrar deneyin. Kişisel mix/radyo sırasını YouTube Music belirler; uygulama kendi kuyruğunu üretmez.
-
-Bağlantı açma işlemi en fazla 16 saniye onay bekler. Kullanıcının yeni kaydetme/duraklatma/kapatma komutu beklemeyi iptal eder; bekleyen eklenti işlemi de iptal edilir. Yeni bağlam taraması mevcut geçiş tamamlandıktan sonra yapılır. YouTube Music'in sayfa yapısı değişirse liste sayfasından ilk şarkıyı bulma uyarlama gerektirebilir; doğrudan `watch` bağlantıları bu adıma ihtiyaç duymaz.
-
-## Paketleme
-
-Paketleri hedef işletim sisteminde üretin:
+Build on each target operating system:
 
 ```sh
-# macOS: .app ve .dmg
+# macOS: .app and .dmg
 npm run bundle -- --bundles app,dmg
 
 # Windows: NSIS .exe
 npm run bundle -- --bundles nsis
 
-# Linux: .deb ve .AppImage
+# Linux: .deb and .AppImage
 npm run bundle -- --bundles deb,appimage
 ```
 
-Çıktılar `src-tauri/target/release/bundle/` altındadır. macOS'ta otomatik test/CI için `CI=true` DMG'nin Finder yerleşim betiğini atlar. Linux AppImage için `APPIMAGE_EXTRACT_AND_RUN=1` kullanılabilir. `.github/workflows/build.yml` üç yerel runner üzerinde test, lint ve paket üretir; paketleri artifact olarak saklar, yayınlama yapmaz.
+Outputs are in `src-tauri/target/release/bundle/`. `CI=true` skips the DMG Finder-layout script for unattended macOS builds. Linux AppImage builds can use `APPIMAGE_EXTRACT_AND_RUN=1`. `.github/workflows/build.yml` tests, lints and packages on three native runners, uploading artifacts without publishing a release. See also [Windows build instructions](docs/WINDOWS-BUILD.md).
 
-macOS Intel/universal dağıtım için ilgili Rust target'larını kurup `npm run bundle -- --target universal-apple-darwin --bundles app,dmg` kullanın. Yerel geliştirme paketi ad-hoc imzalanır; Apple Developer imzası ve notarization içermez. Dağıtım imzası için `bundle.macOS.signingIdentity` değerini kendi Developer ID kimliğinizle değiştirin. Dağıtımda Apple sertifikası/notarization ve Windows code signing bilgilerini kendi CI secrets alanınıza ekleyin; anahtarlar repoya konmaz. [Tauri macOS signing](https://v2.tauri.app/distribute/sign/macos/), [Windows signing](https://v2.tauri.app/distribute/sign/windows/).
+For Intel/universal macOS distribution, install the Rust targets and run `npm run bundle -- --target universal-apple-darwin --bundles app,dmg`. Local builds are ad-hoc signed, without Developer ID or notarization. Set `bundle.macOS.signingIdentity` to your own Developer ID and configure signing/notarization credentials in CI secrets; do not commit keys. References: [macOS signing](https://v2.tauri.app/distribute/sign/macos/), [Windows signing](https://v2.tauri.app/distribute/sign/windows/).
 
-## Mimari
+## Architecture
 
 ```text
-src/                         React arayüzü ve tipli IPC istemcisi
-  App.tsx                    Kontrol paneli, kurallar, ayarlar, etkinlik
-  bridge.ts                  invoke + listen; ayrı web önizlemesi
-  settings.ts                İçe aktarma ve form doğrulama
+src/                         React UI and typed IPC client
+  App.tsx                    Dashboard, rules, settings, activity
+  TrayPanel.tsx              Windows/Linux quick controls
+  i18n.ts                    Shared language store and presentation translation
+  bridge.ts                  invoke + listen; isolated web preview
+  settings.ts                Import and form validation
+locales/en.json               Shared English catalogue (Turkish source keys)
 src-tauri/src/
-  model.rs                   IPC/veri sözleşmeleri
-  platform/mod.rs            Platform trait + cfg seçimi
-  platform/macos.rs          JXA oynatıcı ve tarayıcı adaptörü
+  model.rs                   IPC/data contracts, persisted language
+  i18n.rs                    Native presentation translation
+  platform/mod.rs            Platform trait and cfg selection
+  platform/macos.rs          JXA player and browser adapter
   platform/windows.rs        Win32, UIAutomation, GSMTC, WASAPI
   platform/linux.rs          X11, compositor, MPRIS
-  engine.rs                  Saf öncelik motoru ve monotonic debounce
-  media.rs                   Oynatma sahipliği, manuel müdahale, fade
-  runtime.rs                 Seri iş kuyruğu, snapshot, iptal, hata beklemesi
-  config.rs                  Doğrulama, atomik kayıt, Spotify URI güvenliği
-  browser.rs                 Eşleştirilmiş loopback köprüsü ve YTM adaptörü
-  spotify.rs                 OAuth/PKCE, güvenli depo, Spotify Web API
-  spotify_desktop.rs         macOS Spotify yerel CLI oynatma ve cihaz seçimi
-  desktop.rs                 Tauri komutları, tray ve pencere yaşam döngüsü
-src-tauri/native/macos.m      Rust FFI için küçük Cocoa/AX/CoreAudio katmanı
-browser-extension/           Chromium eklentisi kaynakları
-scripts/package-extension.mjs Chromium ve Firefox manifest üretimi
-tests/                       Playwright kullanıcı akışları + gerçek eklenti testi
-docs/ARCHITECTURE.md          Kararlar, IPC ve operasyonel sınırlar
+  engine.rs                  Priority engine and monotonic debounce
+  media.rs                   Playback ownership, manual override, fades
+  runtime.rs                 Serial queue, snapshots, cancellation, retry delay
+  config.rs                  Validation, atomic storage, playback URL validation
+  browser.rs                 Paired loopback bridge and YTM adapter
+  spotify.rs                 OAuth/PKCE, credential storage, Spotify Web API
+  spotify_desktop.rs         macOS Spotify CLI playback and device selection
+  desktop.rs                 Tauri commands, tray and window lifecycle
+src-tauri/native/menu.m       Native macOS menu
+src-tauri/native/macos.m      Cocoa/AX/CoreAudio FFI
+browser-extension/           Extension sources
+scripts/package-extension.mjs Chromium and Firefox packaging
+tests/                       Playwright flows and native integration tests
+docs/ARCHITECTURE.md          Architecture decisions and operational limits
 ```
 
-## Doğrulama
+## Verification
 
 ```sh
 npm run check
@@ -170,47 +201,19 @@ npx playwright install chromium
 npm run test:e2e
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+# macOS GUI session; uses temporary test windows, no user settings or music
+python3 scripts/test-native-menu.py
 ```
 
-Rust testleri kural önceliği, sahte alan adları, PDF tespiti, debounce, fade hatasında sesi geri yükleme, kullanıcı pause davranışı, aynı playlist'e kesinti sonrası dönüş, PKCE ve köprü doğrulamasını kapsar. Playwright testleri kural oluşturma/kaydetme/silme, modal klavye davranışı, mobil taşma, tarayıcı hata kontrolü ve gerçek Chromium eklentisinin temizlenmiş URL + kimlik anahtarı göndermesini sınar.
+Tests cover rule priority, deceptive domains, PDFs, debounce, volume restoration, manual pause, playlist resumption, PKCE, bridge authentication, rule editing/import, application selection, tray IPC, language persistence and switching without restarting playback. Native menu tests cover the current Space and another application's fullscreen Space.
 
-Gerçek Spotify/Apple Music hesapları, macOS TCC izinleri ve fiziksel Windows/Linux masaüstü oturumları kullanıcı ortamında kabul testi gerektirir. Çapraz `cargo check`, bir hedefin çalışma zamanı veya kurulum paketini doğrulamaz.
+Real accounts, macOS TCC permissions and physical Windows/Linux desktop sessions require acceptance testing on those systems. Cross-compilation does not verify runtime or installer behavior.
 
-## Gizlilik ve kurtarma
+## Settings, privacy and compatibility
 
-Varsayılan yol işletim sisteminin uygulama ayar dizinidir (`dev.musicoptimizer.desktop`). `DESKODY_CONFIG_DIR` ortam değişkeniyle ayrı bir ayar dizini seçilebilir; testlerde kullanıcı ayarlarını etkilemeden çalıştırmak içindir. OAuth token'ları bu override'dan bağımsız olarak sistem güvenli deposundadır.
+Settings use the OS application configuration directory under `dev.musicoptimizer.desktop`. `DESKODY_CONFIG_DIR` selects a separate directory for testing; legacy `MUSIC_OPTIMIZER_CONFIG_DIR` remains supported with lower precedence. OAuth credentials are stored separately in the OS credential store.
 
-Ayarlar geçici dosya + fsync + atomik değiştirme ile kaydedilir. Bozuk veya bilinmeyen sürümlü ayarlar otomatik olarak silinmez; otomasyon kapalı başlar ve hata görünür. Kullanıcı kaydettiğinde dosya yenilenir. En fazla 100 kural kabul edilir. Son 40 etkinlik yalnızca bellektedir; aktif pencere başlığı ve temizlenmiş URL diske yazılmaz. Spotify Web API kapalıyken uygulamanın buluta veri gönderen bir özelliği yoktur.
+Writes use a temporary file, fsync and atomic replacement. Corrupt or unknown-version settings are not silently deleted: automation starts disabled with an error, and saving replaces the file. Up to 100 rules are accepted. Only the latest 40 activity events are kept in memory; active window titles and sanitized URLs are not written to disk. With Spotify Web API disabled, Deskody has no feature that sends data to a cloud service.
 
-
-### macOS sistem menüsü (0.1.9)
-
-Deskody’nin macOS hızlı kontrolleri artık doğrudan `NSStatusItem` → `NSMenu` içinde sunulur. Menü arka planını, cam/saydamlık görünümünü, açık/koyu temayı, gölgeyi, simgenin seçili halini ve tam ekranda menü çubuğu davranışını macOS çizer ve yönetir. Yeşil uygulama teması bu menüde kullanılmaz. macOS 26 kendi güncel menü görünümünü, eski sürümler kendi yerel menü stilini kullanır.
-
-Akış ve kural anahtarları gerçek `NSSwitch`; simgeler SF Symbols, metinler sistem yazı tipi ve semantik sistem renkleridir. Kontroller menüyü kapatmadan çalışır. Oynat/duraklat, gerektiğinde otomasyona dönüş, hata gösterimi, ana uygulamayı açma, yenileme ve çıkış korunur. Kurallar uzunsa yerel kaydırma alanında listelenir. Menü açıkken başka uygulamaya/masaüstüne geçiş yaptırılmaz; ana pencere yalnızca açıkça seçildiğinde açılır. macOS’ta hızlı kontroller için webview oluşturulmaz; Windows/Linux React paneli devam eder.
-
-Yerel entegrasyon testi: `python3 scripts/test-native-menu.py`. Test kendi normal ve tam ekran pencerelerini kullanır, kullanıcı ayarlarına veya müziğine dokunmaz. [Apple’ın menü içinde özel görünümler belgesi](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/MenuList/Articles/ViewsInMenuItems.html) ve SDK `NSMenuItem.view` davranışı temel alınmıştır. 0.1.8’deki NSPanel barındırıcısı macOS üretim yolunda artık kullanılmaz.
-
-### macOS tam ekran ve Spaces desteği (0.1.8, önceki uygulama)
-
-Hızlı panel artık macOS’ta gerçek bir AppKit `NSPanel` içinde açılır. VS Code gibi başka bir uygulama tam ekrandayken veya farklı bir masaüstündeyken menü çubuğundaki Deskody simgesine tıklayabilirsiniz; panel o ekranda açılır ve Deskody’nin ana penceresine/masaüstüne geçiş yaptırmaz. Ana pencere yalnızca **Deskody’yi aç** ile getirilir. Menü çubuğu tam ekranda gizliyse imleci ekranın üstüne götürün.
-
-Panel başka bir uygulamayı etkinleştirmeyen `nonactivatingPanel`, tüm Spaces için `canJoinAllSpaces`, tam ekran için `fullScreenAuxiliary` davranışlarını kullanır. macOS 13 ve üzerinde Stage Manager için `canJoinAllApplications` de uygulanır. macOS 12 desteği korunur. Panel dışına tıklama, Escape, uygulama/Space/ekran değişimi paneli kapatır. Panel kullanımı için yeni bir Erişilebilirlik veya Input Monitoring izni istenmez; otomasyonun mevcut uygulama algılama izinleri ayrı kalır.
-
-Yerel test: `python3 scripts/test-native-panel.py`. Bu komut üretimdeki panel kodunu gerçek WebKit ile çalıştırır; ayrıca otomatik kapanan ayrı bir tam ekran test uygulaması açar. Testler, tam ekran uygulamasının aktif Space’inde kalındığını, panelin uygulama aktivasyonunu değiştirmediğini, WebKit bağlantısını ve klavye davranışını doğrular.
-
-Dayanak: Apple’ın [nonactivatingPanel](https://developer.apple.com/documentation/appkit/nswindow/stylemask-swift.struct/nonactivatingpanel), [fullScreenAuxiliary](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/fullscreenauxiliary), [canJoinAllApplications](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/canjoinallapplications) ve [olay izleme](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/EventOverview/MonitoringEvents/MonitoringEvents.html) belgeleri.
-
-### Menü çubuğundan hızlı kontrol (0.1.7)
-
-macOS ve Windows’ta Deskody simgesine sol tıklamak ana pencere yerine küçük bir kontrol paneli açar. Akış kontrolünü ve her kuralı ayrı ayrı açıp kapatabilir, seçili oynatıcıyı oynatıp duraklatabilir, elle duraklattıktan sonra **Otomasyona dön** ile kuralları yeniden devreye alabilirsiniz. Akış kontrolünü kapatmak mevcut müziği durdurmaz. Kapalıyken yapılan kural seçimleri kaydedilir ve otomasyon yeniden açıldığında uygulanır.
-
-Panel son uygulamayı, eşleşen kuralı ve parça bilgisini gösterir. **Deskody’yi aç** ana pencereye geçer; Escape, kapatma düğmesi veya panel dışına tıklamak paneli gizler. Sağ tıklama menüsü de hızlı kontrole, ana pencereye ve çıkışa erişim sağlar. Linux’ta tray tıklama olayları desteklenmediği için panel tray menüsündeki **Hızlı kontrol** üzerinden açılır; konum bilgisi yoksa birincil ekranın sağ üstüne yerleşir. Bu platform sınırı [Tauri tray belgelerinde](https://v2.tauri.app/learn/system-tray/) açıklanır.
-
-İlk kurulumda ana pencere açılır; kaydedilmiş ayarları olan sonraki başlangıçlar menü çubuğunda çalışır. Uygulamayı Finder’dan yeniden açmak ana pencereyi getirir. Panelde kural değişiklikleri doğrudan kaydedilir ve ana pencereyle eşzamanlanır. Ana penceredeki kaydedilmemiş diğer alanlar korunur. Panel açılınca Deskody’nin kendisi müzik bağlamı sayılmaz; son dış uygulama korunur. İlgisiz bir kuralın anahtarını değiştirmek çalan listeyi yeniden başlatmaz. Eklentiyi yeniden kurmak veya eşleştirmek gerekmez.
-
-### Deskody adı ve sürüm bilgisi (0.1.6)
-
-Uygulama adı Deskody, tarayıcı eklentisi Deskody Bridge’dir. macOS paketi `Deskody.app`, çalıştırılabilir dosya `deskody` adını taşır. Arayüzün altındaki sürüm bilgisi doğrudan `package.json` sürümünden derlenir. Tarayıcı eklentisindeki yeni adı görmek için mevcut eklentiyi **Reload / Yeniden yükle** ile güncelleyin; eşleştirme anahtarı korunur.
-
-Önceki kurulumlarla uyum için OS bundle kimliği (`dev.musicoptimizer.desktop`), ayar dizini, Spotify keyring hizmeti, Firefox extension kimliği ve sayfa köprüsünün dahili olay adları korunur. Böylece isim değişikliği yeni bir hesap/eşleştirme gerektirmez. `MUSIC_OPTIMIZER_CONFIG_DIR` eski ortam değişkeni de desteklenir; `DESKODY_CONFIG_DIR` önceliklidir. Web önizlemesi eski yerel ayar anahtarını okuyabilir; yeni kayıtlar `deskody-preview-v1` anahtarına yazılır.
+The app is **Deskody**, the extension **Deskody Bridge**, the macOS bundle `Deskody.app` and executable `deskody`. The displayed version comes directly from `package.json`. Legacy bundle identifiers, configuration paths, Spotify keyring service, Firefox extension ID and internal bridge events are intentionally retained so existing permissions, settings and pairing survive updates.

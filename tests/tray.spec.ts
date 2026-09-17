@@ -5,6 +5,7 @@ import type { Snapshot } from "../src/types";
 async function panel(page: Page, count = 4) {
   const settings = defaultSettings();
   settings.enabled = true;
+  settings.language = "tr";
   settings.rules = Array.from({ length: count }, (_, index) => ({
     ...settings.rules[index % settings.rules.length],
     id: `rule-${index}`,
@@ -210,10 +211,31 @@ test("panel renders at actual window dimensions and preview controls stay disabl
     .newPage({ viewport: { width: 380, height: 580 } });
   await preview.goto("http://127.0.0.1:1420/?panel=tray");
   await expect(
-    preview.getByRole("switch", { name: "Akış kontrolü", exact: true }),
+    preview.getByRole("switch", { name: "Flow control", exact: true }),
   ).toBeDisabled();
   await expect(
-    preview.getByRole("button", { name: "Deskody’yi aç" }),
+    preview.getByRole("button", { name: "Open Deskody" }),
   ).toBeDisabled();
   await preview.close();
+});
+
+test("language change from the main window updates the open panel without changing rule names", async ({
+  page,
+}) => {
+  await panel(page);
+  await page.evaluate(() => {
+    const state = (window as any).trayTest;
+    state.snapshot.settings.language = "en";
+    state.publish();
+  });
+  await expect(
+    page.getByRole("switch", { name: "Flow control", exact: true }),
+  ).toBeChecked();
+  await expect(
+    page.getByRole("switch", { name: "Kodlama rule" }),
+  ).toBeChecked();
+  await expect(
+    page.getByRole("button", { name: "Open Deskody" }),
+  ).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });

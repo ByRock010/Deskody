@@ -3,10 +3,7 @@ use crate::{
     runtime::{QuickChange, Service, Snapshot},
 };
 #[cfg(not(target_os = "macos"))]
-use std::{
-    sync::Mutex,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 #[cfg(not(target_os = "macos"))]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{
@@ -15,9 +12,28 @@ use tauri::{
     Emitter, Manager, State,
 };
 
+struct LocalizedMenu {
+    items: Vec<(&'static str, MenuItem<tauri::Wry>)>,
+    language: std::sync::Mutex<crate::model::Language>,
+}
+impl LocalizedMenu {
+    fn update(&self, language: crate::model::Language) {
+        let Ok(mut current) = self.language.lock() else {
+            return;
+        };
+        if *current == language {
+            return;
+        }
+        for (title, item) in &self.items {
+            let _ = item.set_text(crate::i18n::text(language, title));
+        }
+        *current = language;
+    }
+}
+
 #[cfg(not(target_os = "macos"))]
 #[derive(Default)]
-struct PanelState(Mutex<Option<Instant>>);
+struct PanelState(std::sync::Mutex<Option<Instant>>);
 
 #[cfg(target_os = "macos")]
 mod mac_menu {
@@ -41,7 +57,14 @@ mod mac_menu {
         let _ = APP.set(app.clone());
     }
     pub fn publish(snapshot: &Snapshot) {
-        if let Some(json) = serde_json::to_string(snapshot)
+        let mut payload = serde_json::to_value(snapshot).unwrap_or_default();
+        payload["translations"] =
+            serde_json::to_value(crate::i18n::catalogue()).unwrap_or_default();
+        if let Some(error) = snapshot.status.error.as_ref() {
+            payload["status"]["error"] =
+                crate::i18n::text(snapshot.settings.language, error).into();
+        }
+        if let Some(json) = serde_json::to_string(&payload)
             .ok()
             .and_then(|s| CString::new(s).ok())
         {
@@ -95,9 +118,14 @@ mod mac_menu {
             if let Ok(snapshot) = service.get() {
                 publish(&snapshot);
             }
-            let error = result
-                .err()
-                .map(|e| CString::new(e.to_string().replace('\0', "")).unwrap_or_default());
+            let language = service
+                .get()
+                .map(|s| s.settings.language)
+                .unwrap_or_default();
+            let error = result.err().map(|e| {
+                CString::new(crate::i18n::text(language, &e.to_string()).replace('\0', ""))
+                    .unwrap_or_default()
+            });
             unsafe {
                 deskody_menu_result(error.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()));
             }
@@ -339,17 +367,61 @@ pub fn run() {
             let service = Service::start(directory, move |snapshot| {
                 #[cfg(target_os = "macos")]
                 mac_menu::publish(&snapshot);
+                if let Some(menu) = handle.try_state::<LocalizedMenu>() {
+                    menu.update(snapshot.settings.language);
+                }
                 let _ = handle.emit("deskody://status", snapshot);
             })?;
             let bridge = service.bridge.clone();
             app.manage(service);
             tauri::async_runtime::spawn(crate::browser::serve(bridge));
-            let panel = MenuItem::with_id(app, "panel", "Hızlı kontrol", true, None::<&str>)?;
-            let open = MenuItem::with_id(app, "open", "Deskody’yi aç", true, None::<&str>)?;
-            let toggle =
-                MenuItem::with_id(app, "toggle", "Otomasyonu aç / kapat", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Çıkış", true, None::<&str>)?;
+            let panel = MenuItem::with_id(
+                app,
+                "panel",
+                crate::i18n::text(
+                    app.state::<Service>().get()?.settings.language,
+                    "Hızlı kontrol",
+                ),
+                true,
+                None::<&str>,
+            )?;
+            let open = MenuItem::with_id(
+                app,
+                "open",
+                crate::i18n::text(
+                    app.state::<Service>().get()?.settings.language,
+                    "Deskody’yi aç",
+                ),
+                true,
+                None::<&str>,
+            )?;
+            let toggle = MenuItem::with_id(
+                app,
+                "toggle",
+                crate::i18n::text(
+                    app.state::<Service>().get()?.settings.language,
+                    "Otomasyonu aç / kapat",
+                ),
+                true,
+                None::<&str>,
+            )?;
+            let quit = MenuItem::with_id(
+                app,
+                "quit",
+                crate::i18n::text(app.state::<Service>().get()?.settings.language, "Çıkış"),
+                true,
+                None::<&str>,
+            )?;
             let menu = Menu::with_items(app, &[&panel, &toggle, &open, &quit])?;
+            app.manage(LocalizedMenu {
+                language: std::sync::Mutex::new(app.state::<Service>().get()?.settings.language),
+                items: vec![
+                    ("Hızlı kontrol", panel),
+                    ("Deskody’yi aç", open),
+                    ("Otomasyonu aç / kapat", toggle),
+                    ("Çıkış", quit),
+                ],
+            });
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
             let tray = TrayIconBuilder::with_id("main-tray")
                 .icon(icon)

@@ -1,3 +1,4 @@
+import { t, useLanguage, setLanguage } from "./i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
@@ -20,6 +21,7 @@ import { version } from "../package.json";
 import "./tray.css";
 
 export default function TrayPanel() {
+  useLanguage();
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +32,10 @@ export default function TrayPanel() {
     let active = true;
     let unsubscribe: (() => void) | undefined;
     const update = (next: Snapshot) => {
-      if (active) setSnapshot(next);
+      if (active) {
+        setLanguage(next.settings.language);
+        setSnapshot(next);
+      }
     };
     const fail = (reason: unknown) => {
       if (active) setError(String(reason));
@@ -106,7 +111,7 @@ export default function TrayPanel() {
   return (
     <main
       className="tray-panel"
-      aria-label="Deskody hızlı kontrol"
+      aria-label={t("Deskody hızlı kontrol")}
       aria-busy={busy}
     >
       <header className="tray-header">
@@ -116,13 +121,13 @@ export default function TrayPanel() {
           </span>
           <div>
             <strong>Deskody</strong>
-            <p>Müzik, odağına eşlik etsin.</p>
+            <p>{t("Müzik, odağına eşlik etsin.")}</p>
           </div>
         </div>
         <button
           ref={closeButton}
           className="tray-icon-button"
-          aria-label="Paneli kapat"
+          aria-label={t("Paneli kapat")}
           disabled={!desktop}
           onClick={() => void run(api.closePanel)}
         >
@@ -131,33 +136,36 @@ export default function TrayPanel() {
       </header>
       {!snapshot ? (
         <div className="tray-loading" role="status">
-          {error || "Kontroller yükleniyor…"}
+          {error || t("Kontroller yükleniyor…")}
         </div>
       ) : (
         <>
           <div className="tray-content">
             {!desktop && (
               <p className="tray-hint">
-                Web önizlemesi · Kontroller masaüstünde kullanılabilir.
+                {" "}
+                {t(
+                  "Web önizlemesi · Kontroller masaüstünde kullanılabilir.",
+                )}{" "}
               </p>
             )}
             <section
               className={`tray-flow ${enabled ? "enabled" : ""}`}
-              aria-label="Akış kontrolü"
+              aria-label={t("Akış kontrolü")}
             >
               <div className="tray-row">
                 <div>
-                  <h1>Akış kontrolü</h1>
+                  <h1>{t("Akış kontrolü")}</h1>
                   <p>
                     {enabled
-                      ? "Müzik, kurallarına göre değişir"
-                      : "Müziğin kontrolü sende"}
+                      ? t("Müzik, kurallarına göre değişir")
+                      : t("Müziğin kontrolü sende")}
                   </p>
                 </div>
                 <button
                   className={`toggle ${enabled ? "on" : ""}`}
                   role="switch"
-                  aria-label="Akış kontrolü"
+                  aria-label={t("Akış kontrolü")}
                   aria-checked={enabled}
                   disabled={disabled}
                   onClick={() =>
@@ -173,8 +181,8 @@ export default function TrayPanel() {
                   {enabled
                     ? status?.context.app ||
                       status?.lastContext?.app ||
-                      "Bağlam bekleniyor"
-                    : "Otomasyon kapalı"}
+                      t("Bağlam bekleniyor")
+                    : t("Otomasyon kapalı")}
                 </span>
                 {activeRule && (
                   <span className="tray-active-name" title={activeRule.name}>
@@ -183,34 +191,38 @@ export default function TrayPanel() {
                 )}
               </div>
             </section>
-            <section className="tray-player" aria-label="Oynatıcı">
+            <section className="tray-player" aria-label={t("Oynatıcı")}>
               <div className="tray-row">
                 <span className="tray-art">
                   <Music2 size={23} />
                 </span>
                 <div className="tray-track">
                   <p className="tray-eyebrow">
-                    {player?.name || "Müzik oynatıcı"}
+                    {player?.name || t("Müzik oynatıcı")}
                   </p>
                   <h2 title={player?.track}>
                     {player?.track ||
-                      (player ? "Parça bilgisi yok" : "Oynatıcı bekleniyor")}
+                      (player
+                        ? t("Parça bilgisi yok")
+                        : t("Oynatıcı bekleniyor"))}
                   </h2>
                   <p title={player?.artist}>
                     {player?.artist ||
                       (player
                         ? player.playing === true
-                          ? "Çalıyor"
+                          ? t("Çalıyor")
                           : player.playing === false
-                            ? "Duraklatıldı"
-                            : "Durum bilinmiyor"
-                        : "Spotify veya YouTube Music’i aç")}
+                            ? t("Duraklatıldı")
+                            : t("Durum bilinmiyor")
+                        : t("Spotify veya YouTube Music’i aç"))}
                   </p>
                 </div>
                 <button
                   className="tray-play"
                   aria-label={
-                    player?.playing === true ? "Müziği duraklat" : "Müziği çal"
+                    player?.playing === true
+                      ? t("Müziği duraklat")
+                      : t("Müziği çal")
                   }
                   disabled={
                     disabled ||
@@ -240,24 +252,27 @@ export default function TrayPanel() {
                 >
                   <RotateCcw size={14} />
                   {enabled
-                    ? "Elle duraklatıldı · Otomasyona dön"
-                    : "Devam etmek için akış kontrolünü aç"}
+                    ? t("Elle duraklatıldı · Otomasyona dön")
+                    : t("Devam etmek için akış kontrolünü aç")}
                 </button>
               )}
             </section>
             <section className="tray-rules" aria-labelledby="tray-rules-title">
               <div className="tray-section-heading">
                 <h2 id="tray-rules-title">
-                  <ListFilter size={15} />
-                  Kurallarım
+                  <ListFilter size={15} /> {t("Kurallarım")}{" "}
                 </h2>
                 <span>
-                  {rules.filter((r) => r.enabled).length} / {rules.length} açık
+                  {rules.filter((r) => r.enabled).length} / {rules.length}{" "}
+                  {t("açık")}{" "}
                 </span>
               </div>
               {!enabled && rules.length > 0 && (
                 <p className="tray-hint">
-                  Seçimlerin kaydedilir; akış kontrolünü açınca uygulanır.
+                  {" "}
+                  {t(
+                    "Seçimlerin kaydedilir; akış kontrolünü açınca uygulanır.",
+                  )}{" "}
                 </p>
               )}
               <div className="tray-rule-list">
@@ -284,7 +299,7 @@ export default function TrayPanel() {
                     <button
                       className={`toggle ${rule.enabled ? "on" : ""}`}
                       role="switch"
-                      aria-label={`${rule.name} kuralı`}
+                      aria-label={t("{} kuralı", rule.name)}
                       aria-checked={rule.enabled}
                       disabled={disabled}
                       onClick={() =>
@@ -301,7 +316,10 @@ export default function TrayPanel() {
                 ))}
                 {!rules.length && (
                   <p className="tray-empty">
-                    Henüz kural yok. Ana uygulamada ilk kuralını oluştur.
+                    {" "}
+                    {t(
+                      "Henüz kural yok. Ana uygulamada ilk kuralını oluştur.",
+                    )}{" "}
                   </p>
                 )}
               </div>
@@ -313,8 +331,7 @@ export default function TrayPanel() {
                   disabled={disabled}
                   onClick={() => void run(api.refresh)}
                 >
-                  <RefreshCw size={13} />
-                  Tekrar dene
+                  <RefreshCw size={13} /> {t("Tekrar dene")}{" "}
                 </button>
               </div>
             )}
@@ -325,16 +342,16 @@ export default function TrayPanel() {
               disabled={!desktop}
               onClick={() => void run(api.openMain)}
             >
-              Deskody’yi aç
-              <ArrowUpRight size={17} />
+              {" "}
+              {t("Deskody’yi aç")} <ArrowUpRight size={17} />
             </button>
             <div className="tray-footer-meta">
               <span>v{version}</span>
               <div>
                 <button
                   className="tray-icon-button"
-                  aria-label="Durumu yenile"
-                  title="Durumu yenile"
+                  aria-label={t("Durumu yenile")}
+                  title={t("Durumu yenile")}
                   disabled={disabled}
                   onClick={() => void run(api.refresh)}
                 >
@@ -342,8 +359,8 @@ export default function TrayPanel() {
                 </button>
                 <button
                   className="tray-icon-button"
-                  aria-label="Deskody’den çık"
-                  title="Deskody’den çık"
+                  aria-label={t("Deskody’den çık")}
+                  title={t("Deskody’den çık")}
                   disabled={disabled}
                   onClick={() => void run(api.quit)}
                 >

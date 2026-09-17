@@ -4,6 +4,7 @@ pub mod config;
 #[cfg(feature = "desktop")]
 mod desktop;
 pub mod engine;
+pub mod i18n;
 pub mod media;
 pub mod model;
 pub mod platform;

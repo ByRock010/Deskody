@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { youtubeMusicUrl } from "../browser-extension/media-target.js";
 import type { Rule, Settings, InstalledApplication, Matcher } from "./types";
 
@@ -19,11 +20,11 @@ export function targetsSpotify(settings: Settings): boolean {
 
 export function defaultSettings(): Settings {
   const rules: Rule[] = [
-    ["Kodlama · VS Code", "Visual Studio Code"],
-    ["Kodlama · Terminal", "Terminal"],
-    ["Kodlama · Xcode", "Xcode"],
-    ["Kodlama · Windows Terminal", "WindowsTerminal"],
-    ["Kodlama · Linux", "code"],
+    ["Coding · VS Code", "Visual Studio Code"],
+    ["Coding · Terminal", "Terminal"],
+    ["Coding · Xcode", "Xcode"],
+    ["Coding · Windows Terminal", "WindowsTerminal"],
+    ["Coding · Linux", "code"],
   ].map(([name, value]) => ({
     id: crypto.randomUUID(),
     name,
@@ -34,7 +35,7 @@ export function defaultSettings(): Settings {
   }));
   rules.push({
     id: crypto.randomUUID(),
-    name: "Ders çalışma",
+    name: "Study",
     enabled: true,
     priority: 60,
     matcher: { kind: "fileExtension", value: "pdf" },
@@ -42,6 +43,7 @@ export function defaultSettings(): Settings {
   });
   return {
     version: 1,
+    language: "en",
     enabled: false,
     provider: "spotify",
     spotifyWeb: false,
@@ -58,24 +60,24 @@ export function defaultSettings(): Settings {
 
 export function validateRule(rule: Rule): string | null {
   if (!rule.name.trim() || rule.name.length > 120)
-    return "Kural adı 1–120 karakter olmalı.";
+    return t("Kural adı 1–120 karakter olmalı.");
   if (rule.matcher.kind === "apps") {
     const apps = rule.matcher.value;
     if (!apps.length || apps.length > 64)
-      return "Bir kural için 1–64 uygulama seçin.";
+      return t("Bir kural için 1–64 uygulama seçin.");
     if (
       apps.some((app) => !validApplication(app)) ||
       new Set(apps.map((app) => app.id.toLowerCase())).size !== apps.length
     )
-      return "Uygulama seçimi geçersiz veya yineleniyor.";
+      return t("Uygulama seçimi geçersiz veya yineleniyor.");
   } else if (!validText(rule.matcher.value, 300))
-    return "Geçerli bir eşleştirme değeri girin.";
+    return t("Geçerli bir eşleştirme değeri girin.");
   if (
     !Number.isInteger(rule.priority) ||
     rule.priority < 0 ||
     rule.priority > 999
   )
-    return "Öncelik 0–999 arasında bir tam sayı olmalı.";
+    return t("Öncelik 0–999 arasında bir tam sayı olmalı.");
   if (rule.matcher.kind === "domain") {
     try {
       const u = new URL(`https://${rule.matcher.value}`);
@@ -88,9 +90,9 @@ export function validateRule(rule: Rule): string | null {
         u.username ||
         u.password
       )
-        return "Yalnızca alan adı girin: ör. github.com";
+        return t("Yalnızca alan adı girin: ör. github.com");
     } catch {
-      return "Geçerli bir alan adı girin.";
+      return t("Geçerli bir alan adı girin.");
     }
   }
   if (rule.action.kind === "play" && rule.action.playlist) {
@@ -115,9 +117,9 @@ export function validateRule(rule: Rule): string | null {
           u.port ||
           !/^\/(track|playlist|album)\/[a-zA-Z0-9]{22}\/?$/.test(u.pathname)
         )
-          return "Geçerli bir Spotify veya YouTube Music bağlantısı girin.";
+          return t("Geçerli bir Spotify veya YouTube Music bağlantısı girin.");
       } catch {
-        return "Geçerli bir Spotify veya YouTube Music bağlantısı girin.";
+        return t("Geçerli bir Spotify veya YouTube Music bağlantısı girin.");
       }
     }
   }
@@ -127,9 +129,12 @@ export function validateRule(rule: Rule): string | null {
 export function parseImport(text: string): Rule[] {
   const parsed: unknown = JSON.parse(text);
   if (!Array.isArray(parsed) || parsed.length > 100)
-    throw new Error("Dosya en fazla 100 kural içeren bir JSON dizisi olmalı.");
+    throw new Error(
+      t("Dosya en fazla 100 kural içeren bir JSON dizisi olmalı."),
+    );
   return parsed.map((value: unknown) => {
-    if (!value || typeof value !== "object") throw new Error("Geçersiz kural.");
+    if (!value || typeof value !== "object")
+      throw new Error(t("Geçersiz kural."));
     const r = value as Record<string, unknown>;
     const m = r.matcher as Record<string, unknown> | undefined;
     const a = r.action as Record<string, unknown> | undefined;
@@ -150,7 +155,7 @@ export function parseImport(text: string): Rule[] {
         a.playlist !== null &&
         typeof a.playlist !== "string")
     )
-      throw new Error("Kural dosyasının yapısı geçersiz.");
+      throw new Error(t("Kural dosyasının yapısı geçersiz."));
     const rule: Rule = {
       id: crypto.randomUUID(),
       name: r.name,
@@ -210,6 +215,8 @@ export function mergeQuickChanges(
 ): Settings {
   return {
     ...draft,
+    language:
+      previous.language !== next.language ? next.language : draft.language,
     enabled: previous.enabled !== next.enabled ? next.enabled : draft.enabled,
     rules: draft.rules.map((rule) => {
       const before = previous.rules.find((r) => r.id === rule.id);

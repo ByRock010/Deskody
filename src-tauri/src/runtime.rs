@@ -32,6 +32,7 @@ pub enum QuickChange {
     Enabled { enabled: bool },
     Rule { id: String, enabled: bool },
     ToggleEnabled,
+    Language { language: Language },
 }
 
 enum SettingsUpdate {
@@ -44,6 +45,7 @@ impl SettingsUpdate {
         match self {
             Self::Replace(settings) => next = settings,
             Self::Quick(QuickChange::Enabled { enabled }) => next.enabled = enabled,
+            Self::Quick(QuickChange::Language { language }) => next.language = language,
             Self::Quick(QuickChange::ToggleEnabled) => next.enabled = !next.enabled,
             Self::Quick(QuickChange::Rule { id, enabled }) => {
                 next.rules
@@ -147,7 +149,9 @@ impl Service {
     }
     pub async fn quick_change(&self, change: QuickChange) -> Result<Settings> {
         let (tx, rx) = oneshot::channel();
-        self.cancel.fetch_add(1, Ordering::Relaxed);
+        if !matches!(change, QuickChange::Language { .. }) {
+            self.cancel.fetch_add(1, Ordering::Relaxed);
+        }
         self.tx
             .try_send(Command::Save(SettingsUpdate::Quick(change), tx))
             .map_err(|_| err("İşlem kuyruğu dolu"))?;
@@ -218,6 +222,7 @@ fn log(status: &mut Status, message: String, level: &str) {
                 .as_secs(),
             message,
             level: level.into(),
+            playback: None,
         },
     );
     status.activity.truncate(40);
@@ -253,6 +258,9 @@ fn worker(
             Ok(Command::Save(update, reply)) => {
                 let result = update.apply(&settings).and_then(|next| {
                     store.save(&next)?;
+                    let mut only_language = settings.clone();
+                    only_language.language = next.language;
+                    let language_only = only_language == next;
                     let reset = next.provider != settings.provider
                         || next.spotify_web != settings.spotify_web
                         || next.spotify_client_id != settings.spotify_client_id
@@ -265,13 +273,15 @@ fn worker(
                     if reset {
                         controller.relinquish();
                     }
-                    gate.reset();
-                    retry_after = Instant::now();
-                    if let Ok(mut b) = bridge.lock() {
-                        b.set_enabled(settings.browser_bridge);
+                    if !language_only {
+                        gate.reset();
+                        retry_after = Instant::now();
+                        if let Ok(mut b) = bridge.lock() {
+                            b.set_enabled(settings.browser_bridge);
+                        }
+                        status.error = None;
+                        effect_error = None;
                     }
-                    status.error = None;
-                    effect_error = None;
                     log(&mut status, "Ayarlar kaydedildi".into(), "info");
                     // Publish committed settings before acknowledging the command. A second
                     // window must never read the pre-save snapshot after a successful write.
@@ -458,10 +468,20 @@ fn worker(
                                                 } else {
                                                     "Çal"
                                                 };
+                                                let playback = PlaybackActivity {
+                                                    app: app.clone(),
+                                                    reason: message.clone(),
+                                                    rule_name: status.active_rule.is_some(),
+                                                    player: player.into(),
+                                                    action: action.into(),
+                                                };
                                                 let message = format!(
                                                     "{app} · {message} → {player}: {action}"
                                                 );
                                                 log(&mut status, message, "info");
+                                                if let Some(entry) = status.activity.first_mut() {
+                                                    entry.playback = Some(playback);
+                                                }
                                             }
                                         }
                                         Err(e) => {
@@ -664,6 +684,38 @@ mod tests {
         fn drop(&mut self) {
             self.service.shutdown();
         }
+    }
+
+    #[tokio::test]
+    async fn language_change_persists_without_cancelling_or_restarting_music() {
+        let mut settings = Settings {
+            provider: Provider::System,
+            target_player: "com.spotify.client".into(),
+            ..Settings::default()
+        };
+        settings.rules.truncate(1);
+        settings.rules[0].name = "Özel çalışma listem".into();
+        settings.rules[0].action = Action::Play {
+            playlist: Some("spotify:playlist:1234567890123456789012".into()),
+        };
+        let harness = Harness::new(settings);
+        harness.wait(|_| harness.input.lock().unwrap().calls.len() == 1);
+        let generation = harness.service.cancel.load(Ordering::SeqCst);
+        for language in [Language::Tr, Language::En] {
+            let saved = harness
+                .service
+                .quick_change(QuickChange::Language { language })
+                .await
+                .unwrap();
+            assert_eq!(saved.language, language);
+            assert_eq!(saved.rules[0].name, "Özel çalışma listem");
+            assert_eq!(Store::new(harness.directory.path()).load().unwrap(), saved);
+            harness.service.refresh();
+            harness.wait(|s| s.settings.language == language && s.status.active_rule.is_some());
+            assert_eq!(harness.service.cancel.load(Ordering::SeqCst), generation);
+            assert_eq!(harness.input.lock().unwrap().calls.len(), 1);
+        }
+        harness.service.stop().await;
     }
 
     #[tokio::test]

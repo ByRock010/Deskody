@@ -3,6 +3,18 @@ const { version } = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 );
 import { test, expect } from "@playwright/test";
+import { defaultSettings } from "../src/settings";
+
+// Existing Turkish users keep their chosen language and their own rule names.
+test.beforeEach(async ({ page }) => {
+  const settings = defaultSettings();
+  settings.language = "tr";
+  settings.rules.at(-1)!.name = "Ders çalışma";
+  await page.addInitScript((settings) => {
+    if (!localStorage.getItem("deskody-preview-v1"))
+      localStorage.setItem("deskody-preview-v1", JSON.stringify(settings));
+  }, settings);
+});
 
 test("create, persist and delete a context rule through the interface", async ({
   page,

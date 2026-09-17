@@ -152,3 +152,11 @@ Menü komutları native callback üzerinden `Service::quick_change` ve `Service:
 AppKit menüleri iç içe `NSEventTrackingRunLoopMode` çalıştırdığı için durum güncellemeleri normal Tauri event loop’una bağımlı değildir. Menü açıkken 120 ms NSTimer yalnızca en son native snapshot/sonucu uygular; menü kapanınca timer kaldırılır. UI AppKit ana thread’inde güncellenir. Yapı menü açılmadan önce kurulur; açık menüde kural anahtarları yeniden oluşturulmaz. Kural listesi maksimum 240 pt yükseklikte kayar. NSMenuItem.view boyutu yalnızca gerçekten değiştiğinde güncellenir; aksi halde menü güncelleme/yeniden yerleştirme döngüsü oluşabilir.
 
 `tray-panel` config’i `create:false` olur: Windows/Linux setup onu elle oluşturur; macOS yalnızca ana webview ve yerel menüyü tutar. UI ana pencere IPC/event sözleşmesi ve tarayıcı eklentisi değişmez. Kapanışta native menü iptal edilir, timer kaldırılır ve NSStatusItem önceki menüsüne döndürülür.
+
+## Language preferences (0.1.12)
+
+`Settings.language` is `en | tr`, defaulting to `en` for fresh and legacy settings. The `quick_change` IPC variant `{ kind: "language", language }` atomically updates only the committed language. It does not advance the playback cancellation generation, reset the decision gate, relinquish playback ownership or clear an existing playback error. Unrelated unsaved frontend settings remain drafts.
+
+`locales/en.json` is the shared presentation catalogue: Turkish source messages map to English. React subscribes to the committed language through `src/i18n.ts`; the macOS native menu receives the same catalogue and locale through its private snapshot payload. Windows/Linux menu items and quick panels follow the same setting. User-authored rule names, application identifiers/names and media metadata bypass translation. Playback activity stores structured fields so system reasons/actions can change language without rewriting user text. UI/error translation does not change engine decisions or persisted rule data.
+
+The language setting uses the existing atomic configuration store, not browser/OS locale detection. Missing language fields migrate to English when read; unknown language values are rejected. Changing the language requires no extension update or re-pairing.

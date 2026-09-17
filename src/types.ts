@@ -1,3 +1,4 @@
+export type Language = "en" | "tr";
 export type Provider = "spotify" | "system";
 export interface InstalledApplication {
   id: string;
@@ -21,6 +22,7 @@ export interface Rule {
   action: Action;
 }
 export interface Settings {
+  language: Language;
   version: number;
   enabled: boolean;
   provider: Provider;
@@ -71,11 +73,24 @@ export interface Status {
   error: string | null;
   manualOverride: boolean;
   bridgeConnected: boolean;
-  activity: { time: number; message: string; level: string }[];
+  activity: ActivityEntry[];
 }
 export interface Snapshot {
   settings: Settings;
   status: Status;
   permissions: Permissions;
   players: Player[];
+}
+
+export interface ActivityEntry {
+  time: number;
+  message: string;
+  level: string;
+  playback?: {
+    app: string;
+    reason: string;
+    ruleName: boolean;
+    player: string;
+    action: string;
+  };
 }

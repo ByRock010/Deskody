@@ -1,3 +1,4 @@
+import { t, useLanguage, setLanguage, activityMessage } from "./i18n";
 import { version as appVersion } from "../package.json";
 import { ApplicationPicker } from "./ApplicationPicker";
 import { useEffect, useRef, useState } from "react";
@@ -50,10 +51,10 @@ import type { Rule, Settings, Snapshot } from "./types";
 
 type Page = "overview" | "rules" | "activity" | "settings";
 const navigation = [
-  { id: "overview", label: "Genel bakış", icon: LayoutDashboard },
-  { id: "rules", label: "Kurallarım", icon: ListFilter },
-  { id: "activity", label: "Etkinlik", icon: Activity },
-  { id: "settings", label: "Ayarlar", icon: Settings2 },
+  { id: "overview", label: t("Genel bakış"), icon: LayoutDashboard },
+  { id: "rules", label: t("Kurallarım"), icon: ListFilter },
+  { id: "activity", label: t("Etkinlik"), icon: Activity },
+  { id: "settings", label: t("Ayarlar"), icon: Settings2 },
 ] as const;
 
 function Toggle({
@@ -72,7 +73,7 @@ function Toggle({
       type="button"
       role="switch"
       aria-checked={checked}
-      aria-label={label}
+      aria-label={t(label)}
       disabled={disabled}
       className={`toggle ${checked ? "on" : ""}`}
       onClick={() => onChange(!checked)}
@@ -92,6 +93,7 @@ function IconBox({
 }
 
 export default function App() {
+  const language = useLanguage();
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [draft, setDraft] = useState<Settings | null>(null);
   const [page, setPage] = useState<Page>("overview");
@@ -112,6 +114,7 @@ export default function App() {
     let unsubscribe: (() => void) | undefined;
     const update = (next: Snapshot) => {
       if (!active) return;
+      setLanguage(next.settings.language);
       setSnapshot(next);
       const previous = settingsRef.current;
       settingsRef.current = next.settings;
@@ -183,9 +186,23 @@ export default function App() {
         setSnapshot((s) => (s ? { ...s, settings } : s));
       },
       desktop
-        ? "Ayarlar kaydedildi"
-        : "Önizleme ayarları bu tarayıcıya kaydedildi",
+        ? t("Ayarlar kaydedildi")
+        : t("Önizleme ayarları bu tarayıcıya kaydedildi"),
     );
+  };
+  const changeLanguage = async (language: "en" | "tr") => {
+    await execute(async () => {
+      const previous = settingsRef.current;
+      const settings = await api.quickChange({ kind: "language", language });
+      settingsRef.current = settings;
+      setLanguage(settings.language);
+      setSnapshot((s) => (s ? { ...s, settings } : s));
+      setDraft((current) =>
+        current && previous
+          ? mergeQuickChanges(current, previous, settings)
+          : settings,
+      );
+    });
   };
   const newRule = () =>
     setEditing({
@@ -207,10 +224,11 @@ export default function App() {
       <div className="loading">
         <AudioLines size={36} />
         <h1>Deskody</h1>
-        <p>{notice?.message || "Çalışma alanın hazırlanıyor…"}</p>
+        <p>{t(notice?.message) || t("Çalışma alanın hazırlanıyor…")}</p>
         {notice && (
           <button className="button" onClick={() => location.reload()}>
-            Yeniden dene
+            {" "}
+            {t("Yeniden dene")}{" "}
           </button>
         )}
       </div>
@@ -222,8 +240,8 @@ export default function App() {
   const rules = draft.rules
     .filter((r) =>
       `${r.name} ${matcherLabel(r.matcher)}`
-        .toLocaleLowerCase("tr")
-        .includes(query.toLocaleLowerCase("tr")),
+        .toLocaleLowerCase(language)
+        .includes(query.toLocaleLowerCase(language)),
     )
     .sort(
       (a, b) =>
@@ -264,23 +282,23 @@ export default function App() {
           <span>
             {matcherLabel(rule.matcher)} <ArrowRight size={11} />{" "}
             {rule.action.kind === "pause"
-              ? "Müziği duraklat"
+              ? t("Müziği duraklat")
               : rule.action.playlist
                 ? rule.action.playlist.startsWith("https://music.youtube.com/")
-                  ? "YouTube Music · şarkı / liste"
-                  : "Spotify · şarkı / liste / albüm"
-                : "Mevcut müziği çal"}
+                  ? t("YouTube Music · şarkı / liste")
+                  : t("Spotify · şarkı / liste / albüm")
+                : t("Mevcut müziği çal")}
           </span>
         </button>
         {status.activeRule === rule.id && (
-          <span className="small-badge active">AKTİF</span>
+          <span className="small-badge active">{t("AKTİF")}</span>
         )}
-        <span className="priority" title="Öncelik">
+        <span className="priority" title={t("Öncelik")}>
           {rule.priority}
         </span>
         <Toggle
           checked={rule.enabled}
-          label={`${rule.name} kuralı`}
+          label={t("{} kuralı", rule.name)}
           disabled={busy}
           onChange={(enabled) =>
             void save({
@@ -293,7 +311,7 @@ export default function App() {
         />
         <button
           className="icon-button"
-          aria-label={`${rule.name} düzenle`}
+          aria-label={t("{} düzenle", rule.name)}
           onClick={() => setEditing(structuredClone(rule))}
         >
           <Pencil size={15} />
@@ -310,8 +328,8 @@ export default function App() {
           </span>
           <div>Deskody</div>
         </div>
-        <div className="workspace-label">KİŞİSEL ÇALIŞMA ALANIN</div>
-        <nav aria-label="Ana menü">
+        <div className="workspace-label">{t("KİŞİSEL ÇALIŞMA ALANIN")}</div>
+        <nav aria-label={t("Ana menü")}>
           {navigation.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -319,7 +337,7 @@ export default function App() {
               onClick={() => setPage(id)}
             >
               <Icon size={18} />
-              {label}
+              {t(label)}
               {id === "rules" && (
                 <span className="nav-count">{draft.rules.length}</span>
               )}
@@ -330,21 +348,20 @@ export default function App() {
           <div className="note-orbit">
             <Headphones size={23} />
           </div>
-          <h3>Sen işine odaklan.</h3>
+          <h3>{t("Sen işine odaklan.")}</h3>
           <p>
-            Müziğin ritmini
-            <br />
-            biz takip edelim.
+            {" "}
+            {t("Müziğin ritmini")} <br /> {t("biz takip edelim.")}{" "}
           </p>
-          <span>DAHA AZ DİKKAT DAĞINIKLIĞI</span>
+          <span>{t("DAHA AZ DİKKAT DAĞINIKLIĞI")}</span>
         </div>
         <div className="local-label">
           <ShieldCheck size={14} />
-          <span>Yerel çalışır. Sana özel.</span>
+          <span>{t("Yerel çalışır. Sana özel.")}</span>
         </div>
         <div className="platform-label">
           <Monitor size={15} />
-          <span>{permissions.platform}</span>
+          <span>{t(permissions.platform)}</span>
           <span className="version">v{appVersion}</span>
         </div>
       </aside>
@@ -352,16 +369,17 @@ export default function App() {
       <main>
         <header className="topbar">
           <div className="breadcrumb">
-            Çalışma alanı <ChevronRight size={14} />
-            <span>{navigation.find((n) => n.id === page)?.label}</span>
+            {" "}
+            {t("Çalışma alanı")} <ChevronRight size={14} />
+            <span>{t(navigation.find((n) => n.id === page)?.label || "")}</span>
           </div>
           <div className={`connection ${running ? "online" : ""}`}>
             <span />
             {running
-              ? "Arka planda çalışıyor"
+              ? t("Arka planda çalışıyor")
               : desktop
-                ? "Otomasyon kapalı"
-                : "Arayüz önizlemesi"}
+                ? t("Otomasyon kapalı")
+                : t("Arayüz önizlemesi")}
           </div>
         </header>
         <div className="content">
@@ -369,43 +387,44 @@ export default function App() {
             <div className="preview-banner">
               <Monitor size={16} />
               <span>
-                Web önizlemesi · Müzik ve pencere algılama, masaüstü
-                uygulamasında çalışır.
+                {" "}
+                {t(
+                  "Web önizlemesi · Müzik ve pencere algılama, masaüstü uygulamasında çalışır.",
+                )}{" "}
               </span>
             </div>
           )}
           <div className="page-heading">
             <div>
-              <div className="eyebrow">MÜZİĞİN, AKIŞINA UYSUN</div>
+              <div className="eyebrow">{t("MÜZİĞİN, AKIŞINA UYSUN")}</div>
               <h1>
                 {page === "overview"
-                  ? "Odağın burada."
+                  ? t("Odağın burada.")
                   : page === "rules"
-                    ? "Senin akışın. Senin kuralların."
+                    ? t("Senin akışın. Senin kuralların.")
                     : page === "activity"
-                      ? "Arka planda neler oluyor?"
-                      : "Her şey, senin ayarında."}
+                      ? t("Arka planda neler oluyor?")
+                      : t("Her şey, senin ayarında.")}
               </h1>
               <p>
                 {page === "overview"
-                  ? "Uygulamalar değişir. Müziğin sana eşlik eder."
+                  ? t("Uygulamalar değişir. Müziğin sana eşlik eder.")
                   : page === "rules"
-                    ? "Bir bağlam seç, müziğin ne yapacağını belirle."
+                    ? t("Bir bağlam seç, müziğin ne yapacağını belirle.")
                     : page === "activity"
-                      ? "Bu oturumdaki otomasyon kararlarını takip et."
-                      : "Oynatıcını bağla, izinlerini ve geçişlerini yönet."}
+                      ? t("Bu oturumdaki otomasyon kararlarını takip et.")
+                      : t("Oynatıcını bağla, izinlerini ve geçişlerini yönet.")}
               </p>
             </div>
             {page === "rules" ? (
               <button className="button primary" onClick={newRule}>
-                <Plus size={16} />
-                Yeni kural
+                <Plus size={16} /> {t("Yeni kural")}{" "}
               </button>
             ) : (
               <button
                 className="icon-button refresh"
-                title="Durumu yenile"
-                aria-label="Durumu yenile"
+                title={t("Durumu yenile")}
+                aria-label={t("Durumu yenile")}
                 disabled={busy}
                 onClick={() => void execute(api.refresh)}
               >
@@ -418,14 +437,15 @@ export default function App() {
             <div className="error-banner" role="alert">
               <CircleHelp size={18} />
               <div>
-                <strong>Bir bağlantıya ihtiyacımız var</strong>
-                <p>{status.error}</p>
+                <strong>{t("Bir bağlantıya ihtiyacımız var")}</strong>
+                <p>{t(status.error)}</p>
               </div>
               <button
                 className="text-button"
                 onClick={() => setPage("settings")}
               >
-                Ayarlar <ArrowRight size={14} />
+                {" "}
+                {t("Ayarlar")} <ArrowRight size={14} />
               </button>
             </div>
           )}
@@ -436,11 +456,11 @@ export default function App() {
                 <div className="focus-top">
                   <span className="chip">
                     <span className="dot" />
-                    {focused ? "ODAK MODU" : "AKILLI OTOMASYON"}
+                    {focused ? t("ODAK MODU") : t("AKILLI OTOMASYON")}
                   </span>
                   <Toggle
                     checked={draft.enabled}
-                    label="Otomasyonu etkinleştir"
+                    label={t("Otomasyonu etkinleştir")}
                     disabled={busy || !desktop}
                     onChange={(enabled) => void save({ ...draft, enabled })}
                   />
@@ -448,17 +468,23 @@ export default function App() {
                 <div className="focus-copy">
                   <h2>
                     {focused
-                      ? "Ritmini buldun."
+                      ? t("Ritmini buldun.")
                       : running
-                        ? "Akışını dinliyoruz."
-                        : "Biraz müzik.\nDaha çok odak."}
+                        ? t("Akışını dinliyoruz.")
+                        : t("Biraz müzik.\nDaha çok odak.")}
                   </h2>
                   <p>
                     {focused
-                      ? status.decision
+                      ? status.activeRule
+                        ? status.decision
+                        : t(status.decision)
                       : running
-                        ? "Aktif uygulaman bir kuralla eşleştiğinde müziğin hazır."
-                        : "Otomasyonu aç. Müziğin, çalıştığın uygulamaya göre kendiliğinden değişsin."}
+                        ? t(
+                            "Aktif uygulaman bir kuralla eşleştiğinde müziğin hazır.",
+                          )
+                        : t(
+                            "Otomasyonu aç. Müziğin, çalıştığın uygulamaya göre kendiliğinden değişsin.",
+                          )}
                   </p>
                 </div>
                 <div
@@ -477,15 +503,17 @@ export default function App() {
                 <div className="focus-bottom">
                   <div>
                     <Monitor size={15} />
-                    <span>{status.context.app || "Bağlam bekleniyor"}</span>
+                    <span>{status.context.app || t("Bağlam bekleniyor")}</span>
                   </div>
                   <span className="focus-divider" />
                   <div>
                     <AudioLines size={15} />
                     <span>
                       {status.manualOverride
-                        ? "Manuel kontrol"
-                        : status.decision}
+                        ? t("Manuel kontrol")
+                        : status.activeRule
+                          ? status.decision
+                          : t(status.decision)}
                     </span>
                   </div>
                 </div>
@@ -497,7 +525,7 @@ export default function App() {
                     <ListFilter size={18} />
                   </IconBox>
                   <div>
-                    <span>Etkin kurallar</span>
+                    <span>{t("Etkin kurallar")}</span>
                     <strong>
                       {enabledRules}
                       <small> / {draft.rules.length}</small>
@@ -509,10 +537,10 @@ export default function App() {
                     <Volume2 size={18} />
                   </IconBox>
                   <div>
-                    <span>Yumuşak geçiş</span>
+                    <span>{t("Yumuşak geçiş")}</span>
                     <strong>
-                      {(draft.fadeMs / 1000).toLocaleString("tr")}
-                      <small> saniye</small>
+                      {(draft.fadeMs / 1000).toLocaleString(language)}
+                      <small> {t("saniye")}</small>
                     </strong>
                   </div>
                 </div>
@@ -521,8 +549,10 @@ export default function App() {
                     <ShieldCheck size={18} />
                   </IconBox>
                   <div>
-                    <span>Video koruması</span>
-                    <strong className="stat-text">Her zaman hazır</strong>
+                    <span>{t("Video koruması")}</span>
+                    <strong className="stat-text">
+                      {t("Her zaman hazır")}
+                    </strong>
                   </div>
                 </div>
               </div>
@@ -530,7 +560,7 @@ export default function App() {
               <div className="overview-grid">
                 <section className="panel now-playing">
                   <div className="section-title">
-                    <h2>Şimdi çalan</h2>
+                    <h2>{t("Şimdi çalan")}</h2>
                     <Radio size={16} />
                   </div>
                   <div className="album-art">
@@ -543,9 +573,12 @@ export default function App() {
                     </span>
                   </div>
                   <div className="track-info">
-                    <h3>{status.player?.track || "Sıradaki ritim, senin."}</h3>
+                    <h3>
+                      {status.player?.track || t("Sıradaki ritim, senin.")}
+                    </h3>
                     <p>
-                      {status.player?.artist || "Oynatıcını aç ve akışa katıl."}
+                      {status.player?.artist ||
+                        t("Oynatıcını aç ve akışa katıl.")}
                     </p>
                   </div>
                   <div className="player-footer">
@@ -554,14 +587,14 @@ export default function App() {
                       {status.player?.name ||
                         (draft.provider === "spotify"
                           ? "Spotify"
-                          : "Oynatıcı seçilmedi")}
+                          : t("Oynatıcı seçilmedi"))}
                     </span>
                     <button
                       className="play-button"
                       aria-label={
                         status.player?.playing
-                          ? "Müziği duraklat"
-                          : "Müziği çal"
+                          ? t("Müziği duraklat")
+                          : t("Müziği çal")
                       }
                       disabled={busy || !desktop || !status.player}
                       onClick={() =>
@@ -581,13 +614,15 @@ export default function App() {
                 <section className="panel rules-preview">
                   <div className="section-title">
                     <h2>
-                      Akış kuralların <span>{draft.rules.length}</span>
+                      {" "}
+                      {t("Akış kuralların")} <span>{draft.rules.length}</span>
                     </h2>
                     <button
                       className="text-button"
                       onClick={() => setPage("rules")}
                     >
-                      Tümünü gör <ArrowRight size={14} />
+                      {" "}
+                      {t("Tümünü gör")} <ArrowRight size={14} />
                     </button>
                   </div>
                   {ruleRows(
@@ -598,16 +633,19 @@ export default function App() {
                   <div className="interrupt-note">
                     <ShieldCheck size={16} />
                     <p>
-                      YouTube ve Netflix açıldığında müzik duraklar.
+                      {" "}
+                      {t("YouTube ve Netflix açıldığında müzik duraklar.")}{" "}
                       <span>
-                        Kesici kurallar, diğer tüm kurallardan önce gelir.
+                        {" "}
+                        {t(
+                          "Kesici kurallar, diğer tüm kurallardan önce gelir.",
+                        )}{" "}
                       </span>
                     </p>
                     <LockKeyhole size={13} />
                   </div>
                   <button className="add-rule" onClick={newRule}>
-                    <Plus size={16} />
-                    Yeni bir bağlam ekle
+                    <Plus size={16} /> {t("Yeni bir bağlam ekle")}{" "}
                   </button>
                 </section>
               </div>
@@ -615,8 +653,10 @@ export default function App() {
                 <div className="preview-banner">
                   <Pause size={16} />
                   <span>
-                    Müzik elle duraklatıldı. Bu bağlamda otomatik başlatma
-                    bekletiliyor.
+                    {" "}
+                    {t(
+                      "Müzik elle duraklatıldı. Bu bağlamda otomatik başlatma bekletiliyor.",
+                    )}{" "}
                   </span>
                   <button
                     className="text-button"
@@ -624,13 +664,14 @@ export default function App() {
                       void execute(() => api.media("resumeAutomation"))
                     }
                   >
-                    Otomasyona dön
+                    {" "}
+                    {t("Otomasyona dön")}{" "}
                   </button>
                 </div>
               )}
               <div className="quiet-footer">
-                <Sparkles size={14} />
-                Küçük bir otomasyon. Kesintisiz bir çalışma alanı.
+                <Sparkles size={14} />{" "}
+                {t("Küçük bir otomasyon. Kesintisiz bir çalışma alanı.")}{" "}
               </div>
             </>
           )}
@@ -639,60 +680,70 @@ export default function App() {
             <>
               <section
                 className="panel rule-diagnostics"
-                aria-label="Kural durumu"
+                aria-label={t("Kural durumu")}
               >
                 <div className="section-title">
-                  <h2>Kural durumu</h2>
+                  <h2>{t("Kural durumu")}</h2>
                   <span className="small-badge">
-                    {status.enabled ? "OTOMASYON AÇIK" : "OTOMASYON KAPALI"}
+                    {status.enabled
+                      ? t("OTOMASYON AÇIK")
+                      : t("OTOMASYON KAPALI")}
                   </span>
                 </div>
                 <p>
-                  {status.error ||
+                  {t(status.error) ||
                     (status.manualOverride
-                      ? "Müzik elle duraklatıldı; otomasyon bekliyor."
-                      : status.decision)}
+                      ? t("Müzik elle duraklatıldı; otomasyon bekliyor.")
+                      : status.activeRule
+                        ? status.decision
+                        : t(status.decision))}
                 </p>
                 <dl>
-                  <dt>Kontrol edilen oynatıcı</dt>
+                  <dt>{t("Kontrol edilen oynatıcı")}</dt>
                   <dd>
                     {status.player?.name ||
                       (draft.targetPlayer
-                        ? `${draft.targetPlayer} · bulunamadı`
-                        : "Oynatıcı seçilmedi")}
+                        ? t("{} · bulunamadı", draft.targetPlayer)
+                        : t("Oynatıcı seçilmedi"))}
                   </dd>
-                  <dt>Son çalışma uygulaması</dt>
+                  <dt>{t("Son çalışma uygulaması")}</dt>
                   <dd>
-                    {status.lastContext?.app || "Henüz algılanmadı"}{" "}
+                    {status.lastContext?.app || t("Henüz algılanmadı")}{" "}
                     {status.lastContext?.appId && (
                       <code>{status.lastContext.appId}</code>
                     )}
                   </dd>
-                  <dt>Pencere / dosya / sekme</dt>
+                  <dt>{t("Pencere / dosya / sekme")}</dt>
                   <dd>
                     {status.lastContext?.document ||
                       status.lastContext?.url ||
                       status.lastContext?.title ||
-                      "Okunamadı"}
+                      t("Okunamadı")}
                   </dd>
-                  <dt>Son kural olayı</dt>
+                  <dt>{t("Son kural olayı")}</dt>
                   <dd>
-                    {status.activity.find((item) => item.message.includes("→"))
-                      ?.message || "Henüz bir kural uygulanmadı"}
+                    {activityMessage(
+                      status.activity.find((item) =>
+                        item.message.includes("→"),
+                      ),
+                    ) || t("Henüz bir kural uygulanmadı")}
                   </dd>
                 </dl>
                 {permissions.platform === "macOS" &&
                   !permissions.accessibility && (
                     <p className="form-error">
-                      Pencere başlığı ve PDF dosyalarını algılamak için
-                      Ayarlar’dan Erişilebilirlik izni verin. Uygulama adı
-                      kuralları bu izin olmadan da çalışır.
+                      {" "}
+                      {t(
+                        "Pencere başlığı ve PDF dosyalarını algılamak için Ayarlar’dan Erişilebilirlik izni verin. Uygulama adı kuralları bu izin olmadan da çalışır.",
+                      )}{" "}
                     </p>
                   )}
                 {!targetsSpotify(draft) && (
                   <p className="helper">
-                    Bağlantılar yalnızca kendi müzik kaynağında kullanılır. Boş
-                    alan seçili oynatıcının mevcut müziğini devam ettirir.
+                    {" "}
+                    {t(
+                      "Bağlantılar yalnızca kendi müzik kaynağında kullanılır. Boş alan seçili oynatıcının mevcut müziğini devam ettirir.",
+                    )}{" "}
                   </p>
                 )}
               </section>
@@ -700,8 +751,8 @@ export default function App() {
                 <div className="search">
                   <ListFilter size={16} />
                   <input
-                    aria-label="Kural ara"
-                    placeholder="Kurallarında ara…"
+                    aria-label={t("Kural ara")}
+                    placeholder={t("Kurallarında ara…")}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
@@ -710,8 +761,7 @@ export default function App() {
                   className="text-button"
                   onClick={() => fileInput.current?.click()}
                 >
-                  <Upload size={15} />
-                  İçe aktar
+                  <Upload size={15} /> {t("İçe aktar")}{" "}
                 </button>
                 <button
                   className="text-button"
@@ -728,8 +778,7 @@ export default function App() {
                     setTimeout(() => URL.revokeObjectURL(url), 1000);
                   }}
                 >
-                  <ArrowDownToLine size={15} />
-                  Dışa aktar
+                  <ArrowDownToLine size={15} /> {t("Dışa aktar")}{" "}
                 </button>
                 <input
                   ref={fileInput}
@@ -741,14 +790,14 @@ export default function App() {
                     if (file)
                       void execute(async () => {
                         if (file.size > 100000)
-                          throw new Error("Dosya 100 KB sınırını aşıyor.");
+                          throw new Error(t("Dosya 100 KB sınırını aşıyor."));
                         const imported = parseImport(await file.text());
                         if (draft.rules.length + imported.length > 100)
                           throw new Error(
-                            "Toplam en fazla 100 kural eklenebilir.",
+                            t("Toplam en fazla 100 kural eklenebilir."),
                           );
                         change({ rules: [...draft.rules, ...imported] });
-                      }, "Kurallar eklendi. Değişiklikleri kaydedin.");
+                      }, t("Kurallar eklendi. Değişiklikleri kaydedin."));
                     event.target.value = "";
                   }}
                 />
@@ -759,14 +808,16 @@ export default function App() {
                     <ShieldCheck size={18} />
                   </IconBox>
                   <div>
-                    <strong>Video ve medya koruması</strong>
+                    <strong>{t("Video ve medya koruması")}</strong>
                     <p>
                       YouTube Watch / Shorts, Netflix
-                      {draft.pauseOnOtherAudio ? " ve diğer aktif medya" : ""} →
-                      duraklat
+                      {draft.pauseOnOtherAudio
+                        ? t(" ve diğer aktif medya")
+                        : ""}{" "}
+                      {t("→ duraklat")}{" "}
                     </p>
                   </div>
-                  <span className="small-badge">EN YÜKSEK ÖNCELİK</span>
+                  <span className="small-badge">{t("EN YÜKSEK ÖNCELİK")}</span>
                   <LockKeyhole size={15} />
                 </div>
                 {ruleRows(rules)}
@@ -774,20 +825,23 @@ export default function App() {
                   <div className="empty">
                     <ListFilter size={30} />
                     <h3>
-                      {query ? "Eşleşen kural yok" : "İlk kuralını oluştur"}
+                      {query
+                        ? t("Eşleşen kural yok")
+                        : t("İlk kuralını oluştur")}
                     </h3>
                     <p>
                       {query
-                        ? "Farklı bir kelimeyle aramayı dene."
-                        : "Aktif uygulamana göre bir müzik davranışı seç."}
+                        ? t("Farklı bir kelimeyle aramayı dene.")
+                        : t("Aktif uygulamana göre bir müzik davranışı seç.")}
                     </p>
                   </div>
                 )}
               </section>
               <p className="helper">
-                <SlidersHorizontal size={14} />
-                Büyük öncelik değeri önce uygulanır. Eşitlikte kural kimliği
-                sıralaması kullanılır.
+                <SlidersHorizontal size={14} />{" "}
+                {t(
+                  "Büyük öncelik değeri önce uygulanır. Eşitlikte kural kimliği sıralaması kullanılır.",
+                )}{" "}
               </p>
             </>
           )}
@@ -795,8 +849,8 @@ export default function App() {
           {page === "activity" && (
             <section className="panel">
               <div className="section-title">
-                <h2>Bu oturum</h2>
-                <span className="small-badge">SON 40 OLAY</span>
+                <h2>{t("Bu oturum")}</h2>
+                <span className="small-badge">{t("SON 40 OLAY")}</span>
               </div>
               {status.activity.length ? (
                 status.activity.map((item, index) => (
@@ -809,9 +863,11 @@ export default function App() {
                       )}
                     </IconBox>
                     <div>
-                      <strong>{item.message}</strong>
+                      <strong>{activityMessage(item)}</strong>
                       <span>
-                        {new Date(item.time * 1000).toLocaleTimeString("tr-TR")}
+                        {new Date(item.time * 1000).toLocaleTimeString(
+                          language,
+                        )}
                       </span>
                     </div>
                   </div>
@@ -819,11 +875,11 @@ export default function App() {
               ) : (
                 <div className="empty">
                   <Activity size={34} />
-                  <h3>Henüz bir etkinlik yok</h3>
+                  <h3>{t("Henüz bir etkinlik yok")}</h3>
                   <p>
-                    Otomasyon kararları burada görünecek.
-                    <br />
-                    Etkinlikler diske kaydedilmez.
+                    {" "}
+                    {t("Otomasyon kararları burada görünecek.")} <br />{" "}
+                    {t("Etkinlikler diske kaydedilmez.")}{" "}
                   </p>
                 </div>
               )}
@@ -835,15 +891,37 @@ export default function App() {
               <section className="panel">
                 <div className="section-title">
                   <h2>
-                    <Headphones size={18} />
-                    Müzik kaynağı
+                    <Globe2 size={18} />
+                    {t("Dil")}
+                  </h2>
+                </div>
+                <label className="field">
+                  {t("Uygulama dili")}
+                  <select
+                    value={language}
+                    disabled={busy}
+                    onChange={(e) =>
+                      void changeLanguage(e.target.value as "en" | "tr")
+                    }
+                  >
+                    <option value="en">English</option>
+                    <option value="tr">Türkçe</option>
+                  </select>
+                  <small>{t("Dil seçimin otomatik kaydedilir.")}</small>
+                </label>
+              </section>
+              <section className="panel">
+                <div className="section-title">
+                  <h2>
+                    <Headphones size={18} /> {t("Müzik kaynağı")}{" "}
                   </h2>
                   <button
                     className="text-button"
                     disabled={busy}
                     onClick={() => void execute(api.refresh)}
                   >
-                    Yenile <RefreshCw size={14} />
+                    {" "}
+                    {t("Yenile")} <RefreshCw size={14} />
                   </button>
                 </div>
                 <div className="provider-options">
@@ -860,7 +938,7 @@ export default function App() {
                     <Disc3 size={27} />
                     <div>
                       <strong>Spotify</strong>
-                      <span>Yerel uygulama kontrolü</span>
+                      <span>{t("Yerel uygulama kontrolü")}</span>
                     </div>
                     {draft.provider === "spotify" && <CheckCheck size={17} />}
                   </button>
@@ -874,7 +952,7 @@ export default function App() {
                   >
                     <Music2 size={27} />
                     <div>
-                      <strong>Diğer oynatıcılar</strong>
+                      <strong>{t("Diğer oynatıcılar")}</strong>
                       <span>YouTube Music, Apple Music, MPRIS</span>
                     </div>
                     {draft.provider === "system" && <CheckCheck size={17} />}
@@ -882,12 +960,13 @@ export default function App() {
                 </div>
                 {(draft.provider === "system" || draft.spotifyWeb) && (
                   <label className="field">
-                    Kontrol edilecek oynatıcı
+                    {" "}
+                    {t("Kontrol edilecek oynatıcı")}{" "}
                     <select
                       value={draft.targetPlayer}
                       onChange={(e) => change({ targetPlayer: e.target.value })}
                     >
-                      <option value="">Oynatıcı seçin</option>
+                      <option value="">{t("Oynatıcı seçin")}</option>
                       {players.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
@@ -898,14 +977,15 @@ export default function App() {
                           (p) => p.id === "browser:music.youtube.com",
                         ) && (
                           <option value="browser:music.youtube.com">
-                            YouTube Music · tarayıcı eklentisi
+                            {" "}
+                            {t("YouTube Music · tarayıcı eklentisi")}{" "}
                           </option>
                         )}
                       {draft.targetPlayer &&
                         !players.some((p) => p.id === draft.targetPlayer) &&
                         draft.targetPlayer !== "browser:music.youtube.com" && (
                           <option value={draft.targetPlayer}>
-                            {draft.targetPlayer} (çevrimdışı)
+                            {draft.targetPlayer} {t("(çevrimdışı)")}{" "}
                           </option>
                         )}
                     </select>
@@ -917,8 +997,10 @@ export default function App() {
                       <div>
                         <strong>Spotify Web API</strong>
                         <p>
-                          Windows'ta bağlantıdan müzik başlatma ve tüm
-                          platformlarda Spotify Connect.
+                          {" "}
+                          {t(
+                            "Windows'ta bağlantıdan müzik başlatma ve tüm platformlarda Spotify Connect.",
+                          )}{" "}
                         </p>
                       </div>
                       <Toggle
@@ -937,21 +1019,22 @@ export default function App() {
                             value={draft.spotifyClientId}
                             maxLength={32}
                             spellCheck={false}
-                            placeholder="32 karakterlik Client ID"
+                            placeholder={t("32 karakterlik Client ID")}
                             onChange={(e) =>
                               change({ spotifyClientId: e.target.value.trim() })
                             }
                           />
                           <small>
-                            Developer Dashboard'da Redirect URI:{" "}
+                            {" "}
+                            {t("Developer Dashboard'da Redirect URI:")}{" "}
                             <code>http://127.0.0.1:43828/callback</code>
                           </small>
                         </label>
                         <p className="helper">
-                          Premium üyelik ve Developer uygulama erişimi gerekir.
-                          Önce ayarları kaydet, hesabını bağla, ardından bu
-                          bilgisayarın Spotify cihazını seç. Anahtarlar sistemin
-                          güvenli deposunda tutulur.
+                          {" "}
+                          {t(
+                            "Premium üyelik ve Developer uygulama erişimi gerekir. Önce ayarları kaydet, hesabını bağla, ardından bu bilgisayarın Spotify cihazını seç. Anahtarlar sistemin güvenli deposunda tutulur.",
+                          )}{" "}
                         </p>
                         <div className="permission-actions">
                           <button
@@ -965,11 +1048,15 @@ export default function App() {
                             onClick={() =>
                               void execute(
                                 () => api.spotify(),
-                                "Spotify hesabı bağlandı. Cihazını seçip kaydet.",
+                                t(
+                                  "Spotify hesabı bağlandı. Cihazını seçip kaydet.",
+                                ),
                               )
                             }
                           >
-                            Spotify hesabını bağla <ExternalLink size={14} />
+                            {" "}
+                            {t("Spotify hesabını bağla")}{" "}
+                            <ExternalLink size={14} />
                           </button>
                           <button
                             className="text-button"
@@ -979,11 +1066,12 @@ export default function App() {
                             onClick={() =>
                               void execute(
                                 () => api.spotify(true),
-                                "Spotify bağlantısı kaldırıldı",
+                                t("Spotify bağlantısı kaldırıldı"),
                               )
                             }
                           >
-                            Bağlantıyı kaldır
+                            {" "}
+                            {t("Bağlantıyı kaldır")}{" "}
                           </button>
                         </div>
                       </>
@@ -991,38 +1079,45 @@ export default function App() {
                   </>
                 )}
                 <p className="helper">
-                  Oynatıcı açık olmalı. Liste seçimi, sağlayıcının desteğine
-                  bağlıdır. Mevcut müzik seçeneği açık oturumu devam ettirir.
+                  {" "}
+                  {t(
+                    "Oynatıcı açık olmalı. Liste seçimi, sağlayıcının desteğine bağlıdır. Mevcut müzik seçeneği açık oturumu devam ettirir.",
+                  )}{" "}
                 </p>
                 <div className="setting-row">
                   <div>
-                    <strong>Manuel medya tuşu</strong>
-                    <p>Sistemin o anki medya hedefine Play/Pause gönderir.</p>
+                    <strong>{t("Manuel medya tuşu")}</strong>
+                    <p>
+                      {t("Sistemin o anki medya hedefine Play/Pause gönderir.")}
+                    </p>
                   </div>
                   <button
                     className="button secondary"
                     disabled={!desktop || busy}
                     onClick={() => void execute(() => api.media("mediaKey"))}
                   >
-                    <Play size={14} />
-                    Gönder
+                    <Play size={14} /> {t("Gönder")}{" "}
                   </button>
                 </div>
               </section>
               <section className="panel">
                 <div className="section-title">
                   <h2>
-                    <SlidersHorizontal size={18} />
-                    Otomasyon davranışı
+                    <SlidersHorizontal size={18} />{" "}
+                    {t("Otomasyon davranışı")}{" "}
                   </h2>
                 </div>
                 <div className="setting-row">
                   <div>
-                    <strong>Başka medya çalarken duraklat</strong>
-                    <p>Seçili müzik oynatıcısı algılamanın dışında tutulur.</p>
+                    <strong>{t("Başka medya çalarken duraklat")}</strong>
+                    <p>
+                      {t(
+                        "Seçili müzik oynatıcısı algılamanın dışında tutulur.",
+                      )}
+                    </p>
                   </div>
                   <Toggle
-                    label="Diğer medya koruması"
+                    label={t("Diğer medya koruması")}
                     checked={draft.pauseOnOtherAudio}
                     onChange={(pauseOnOtherAudio) =>
                       change({ pauseOnOtherAudio })
@@ -1031,7 +1126,8 @@ export default function App() {
                 </div>
                 <label className="range-field">
                   <span>
-                    Yumuşak geçiş <b>{draft.fadeMs} ms</b>
+                    {" "}
+                    {t("Yumuşak geçiş")} <b>{draft.fadeMs} ms</b>
                   </span>
                   <input
                     type="range"
@@ -1042,12 +1138,14 @@ export default function App() {
                     onChange={(e) => change({ fadeMs: Number(e.target.value) })}
                   />
                   <small>
-                    Oynatıcı ses kontrolünü destekliyorsa uygulanır.
+                    {" "}
+                    {t("Oynatıcı ses kontrolünü destekliyorsa uygulanır.")}{" "}
                   </small>
                 </label>
                 <div className="field-grid">
                   <label className="field">
-                    Algılama aralığı
+                    {" "}
+                    {t("Algılama aralığı")}{" "}
                     <select
                       value={draft.pollMs}
                       onChange={(e) =>
@@ -1056,13 +1154,14 @@ export default function App() {
                     >
                       {[750, 1000, 1500, 2000, 3000, 5000, 10000].map((n) => (
                         <option key={n} value={n}>
-                          {n / 1000} saniye
+                          {n / 1000} {t("saniye")}{" "}
                         </option>
                       ))}
                     </select>
                   </label>
                   <label className="field">
-                    Bağlamın sabit kalma süresi
+                    {" "}
+                    {t("Bağlamın sabit kalma süresi")}{" "}
                     <select
                       value={draft.settleMs}
                       onChange={(e) =>
@@ -1071,7 +1170,7 @@ export default function App() {
                     >
                       {[500, 1000, 2000, 3000, 5000, 10000, 15000].map((n) => (
                         <option key={n} value={n}>
-                          {n / 1000} saniye
+                          {n / 1000} {t("saniye")}{" "}
                         </option>
                       ))}
                     </select>
@@ -1081,18 +1180,17 @@ export default function App() {
               <section className="panel">
                 <div className="section-title">
                   <h2>
-                    <ShieldCheck size={18} />
-                    Sistem izinleri
+                    <ShieldCheck size={18} /> {t("Sistem izinleri")}{" "}
                   </h2>
-                  <span className="small-badge">{permissions.platform}</span>
+                  <span className="small-badge">{t(permissions.platform)}</span>
                 </div>
                 <div className="setting-row">
                   <div>
-                    <strong>Erişilebilirlik / pencere algılama</strong>
+                    <strong>{t("Erişilebilirlik / pencere algılama")}</strong>
                     <p>
                       {permissions.accessibility
-                        ? "Yerel pencere algılama kullanılabilir."
-                        : "Pencere ve dosya bağlamı için izin gerekiyor."}
+                        ? t("Yerel pencere algılama kullanılabilir.")
+                        : t("Pencere ve dosya bağlamı için izin gerekiyor.")}
                     </p>
                   </div>
                   {permissions.accessibility ? (
@@ -1105,11 +1203,12 @@ export default function App() {
                         void execute(() => api.permission("accessibility"))
                       }
                     >
-                      İzin ver <ExternalLink size={13} />
+                      {" "}
+                      {t("İzin ver")} <ExternalLink size={13} />
                     </button>
                   )}
                 </div>
-                <p className="helper">{permissions.automation}</p>
+                <p className="helper">{t(permissions.automation)}</p>
                 <div className="permission-actions">
                   <button
                     className="text-button"
@@ -1117,11 +1216,12 @@ export default function App() {
                     onClick={() =>
                       void execute(
                         () => api.permission("automation"),
-                        "İzin kontrolü tamamlandı",
+                        t("İzin kontrolü tamamlandı"),
                       )
                     }
                   >
-                    Spotify erişimini kontrol et <ArrowRight size={14} />
+                    {" "}
+                    {t("Spotify erişimini kontrol et")} <ArrowRight size={14} />
                   </button>
                   <button
                     className="text-button"
@@ -1130,56 +1230,67 @@ export default function App() {
                       void execute(() => api.permission("settings"))
                     }
                   >
-                    Sistem ayarları <ExternalLink size={14} />
+                    {" "}
+                    {t("Sistem ayarları")} <ExternalLink size={14} />
                   </button>
                 </div>
                 {permissions.capabilities.map((c) => (
-                  <div className="capability" key={c.name}>
+                  <div className="capability" key={t(c.name)}>
                     <span className={`dot ${c.available ? "" : "neutral"}`} />
                     <div>
-                      <strong>{c.name}</strong>
-                      <p>{c.detail}</p>
+                      <strong>{t(c.name)}</strong>
+                      <p>{t(c.detail)}</p>
                     </div>
-                    <span>{c.available ? "Destekleniyor" : "Kısıtlı"}</span>
+                    <span>
+                      {c.available ? t("Destekleniyor") : t("Kısıtlı")}
+                    </span>
                   </div>
                 ))}
               </section>
               <section className="panel">
                 <div className="section-title">
                   <h2>
-                    <Globe2 size={18} />
-                    Tarayıcı köprüsü
+                    <Globe2 size={18} /> {t("Tarayıcı köprüsü")}{" "}
                   </h2>
                   <span
                     className={`small-badge ${status.bridgeConnected ? "active" : ""}`}
                   >
-                    {status.bridgeConnected ? "BAĞLI" : "BAĞLI DEĞİL"}
+                    {status.bridgeConnected ? t("BAĞLI") : t("BAĞLI DEĞİL")}
                   </span>
                 </div>
                 <div className="setting-row">
                   <div>
-                    <strong>Sekmeleri müziğinle eşleştir</strong>
-                    <p>Firefox/Chromium sekmeleri ve YouTube Music kontrolü.</p>
+                    <strong>{t("Sekmeleri müziğinle eşleştir")}</strong>
+                    <p>
+                      {t(
+                        "Firefox/Chromium sekmeleri ve YouTube Music kontrolü.",
+                      )}
+                    </p>
                   </div>
                   <Toggle
-                    label="Tarayıcı köprüsü"
+                    label={t("Tarayıcı köprüsü")}
                     checked={draft.browserBridge}
                     onChange={(browserBridge) => change({ browserBridge })}
                   />
                 </div>
                 <ol className="setup-steps">
                   <li>
-                    Tarayıcıda geliştirici modunu açıp{" "}
-                    <code>browser-extension</code> klasörünü paketlenmemiş
-                    eklenti olarak yükle.
+                    {" "}
+                    {t("Tarayıcıda geliştirici modunu açıp")}{" "}
+                    <code>browser-extension</code>{" "}
+                    {t("klasörünü paketlenmemiş eklenti olarak yükle.")}{" "}
                   </li>
                   <li>
-                    Bu ayarı kaydet. Eşleştirme anahtarını eklentinin ayarlarına
-                    yapıştır.
+                    {" "}
+                    {t(
+                      "Bu ayarı kaydet. Eşleştirme anahtarını eklentinin ayarlarına yapıştır.",
+                    )}{" "}
                   </li>
                   <li>
-                    YouTube Music için müzik kaynağından eklenti oynatıcısını
-                    seç.
+                    {" "}
+                    {t(
+                      "YouTube Music için müzik kaynağından eklenti oynatıcısını seç.",
+                    )}{" "}
                   </li>
                 </ol>
                 <button
@@ -1189,13 +1300,13 @@ export default function App() {
                     void execute(async () => setToken(await api.token()))
                   }
                 >
-                  <LockKeyhole size={14} />
-                  Eşleştirme anahtarını göster
+                  <LockKeyhole size={14} />{" "}
+                  {t("Eşleştirme anahtarını göster")}{" "}
                 </button>
                 {token && (
                   <div className="token-display">
                     <input
-                      aria-label="Eşleştirme anahtarı"
+                      aria-label={t("Eşleştirme anahtarı")}
                       readOnly
                       value={token}
                       onFocus={(e) => e.target.select()}
@@ -1205,15 +1316,16 @@ export default function App() {
                       onClick={() =>
                         void execute(
                           () => navigator.clipboard.writeText(token),
-                          "Anahtar kopyalandı",
+                          t("Anahtar kopyalandı"),
                         )
                       }
                     >
-                      Kopyala
+                      {" "}
+                      {t("Kopyala")}{" "}
                     </button>
                     <button
                       className="icon-button"
-                      aria-label="Anahtarı gizle"
+                      aria-label={t("Anahtarı gizle")}
                       onClick={() => setToken("")}
                     >
                       <X size={14} />
@@ -1221,8 +1333,10 @@ export default function App() {
                   </div>
                 )}
                 <p className="helper">
-                  <LockKeyhole size={13} />
-                  Yalnızca bu bilgisayara bağlanır. Gizli sekmeler paylaşılmaz.
+                  <LockKeyhole size={13} />{" "}
+                  {t(
+                    "Yalnızca bu bilgisayara bağlanır. Gizli sekmeler paylaşılmaz.",
+                  )}{" "}
                 </p>
               </section>
             </div>
@@ -1231,8 +1345,7 @@ export default function App() {
         {dirty && (
           <div className="save-bar">
             <span>
-              <span className="dot" />
-              Kaydedilmemiş değişiklikler
+              <span className="dot" /> {t("Kaydedilmemiş değişiklikler")}{" "}
             </span>
             <button
               className="text-button"
@@ -1242,7 +1355,8 @@ export default function App() {
                 setDraft(snapshot.settings);
               }}
             >
-              Vazgeç
+              {" "}
+              {t("Vazgeç")}{" "}
             </button>
             <button
               className="button primary"
@@ -1250,7 +1364,7 @@ export default function App() {
               onClick={() => void save()}
             >
               <Save size={15} />
-              {busy ? "Kaydediliyor…" : "Değişiklikleri kaydet"}
+              {busy ? t("Kaydediliyor…") : t("Değişiklikleri kaydet")}
             </button>
           </div>
         )}
@@ -1261,10 +1375,10 @@ export default function App() {
           role={notice.error ? "alert" : "status"}
         >
           {notice.error ? <CircleHelp size={18} /> : <Check size={18} />}
-          <span>{notice.message}</span>
+          <span>{t(notice.message)}</span>
           <button
             className="icon-button"
-            aria-label="Bildirimi kapat"
+            aria-label={t("Bildirimi kapat")}
             onClick={() => setNotice(null)}
           >
             <X size={15} />
@@ -1352,7 +1466,7 @@ function RuleEditor({
     setError("");
     if (!(await onSave(next)))
       setError(
-        "Kural kaydedilemedi. Düzenlemen korunuyor; tekrar deneyebilirsin.",
+        t("Kural kaydedilemedi. Düzenlemen korunuyor; tekrar deneyebilirsin."),
       );
   };
   return (
@@ -1371,32 +1485,34 @@ function RuleEditor({
         <fieldset disabled={busy} className="rule-fields">
           <div className="section-title">
             <div>
-              <div className="eyebrow">AKIŞINI KİŞİSELLEŞTİR</div>
-              <h2>{onDelete ? "Kuralı düzenle" : "Yeni bir kural"}</h2>
+              <div className="eyebrow">{t("AKIŞINI KİŞİSELLEŞTİR")}</div>
+              <h2>{onDelete ? t("Kuralı düzenle") : t("Yeni bir kural")}</h2>
             </div>
             <button
               type="button"
               className="icon-button"
-              aria-label="Kapat"
+              aria-label={t("Kapat")}
               onClick={onClose}
             >
               <X size={20} />
             </button>
           </div>
           <label className="field">
-            Kural adı
+            {" "}
+            {t("Kural adı")}{" "}
             <input
               autoFocus
               required
               maxLength={120}
-              placeholder="Ör. Derin çalışma"
+              placeholder={t("Ör. Derin çalışma")}
               value={value.name}
               onChange={(e) => setValue({ ...value, name: e.target.value })}
             />
           </label>
           <div className="field-grid">
             <label className="field">
-              Şu bağlamda
+              {" "}
+              {t("Şu bağlamda")}{" "}
               <select
                 value={
                   value.matcher.kind === "app" ? "apps" : value.matcher.kind
@@ -1415,15 +1531,16 @@ function RuleEditor({
                   })
                 }
               >
-                <option value="apps">Uygulamalar</option>
-                <option value="domain">Web sitesi</option>
-                <option value="fileExtension">Dosya uzantısı</option>
-                <option value="title">Pencere başlığı içerir</option>
+                <option value="apps">{t("Uygulamalar")}</option>
+                <option value="domain">{t("Web sitesi")}</option>
+                <option value="fileExtension">{t("Dosya uzantısı")}</option>
+                <option value="title">{t("Pencere başlığı içerir")}</option>
               </select>
             </label>
             {value.matcher.kind !== "app" && value.matcher.kind !== "apps" && (
               <label className="field">
-                Eşleşme
+                {" "}
+                {t("Eşleşme")}{" "}
                 <input
                   required
                   maxLength={300}
@@ -1432,7 +1549,7 @@ function RuleEditor({
                       ? "github.com"
                       : value.matcher.kind === "fileExtension"
                         ? "pdf"
-                        : "Proje adı"
+                        : t("Proje adı")
                   }
                   value={value.matcher.value}
                   onChange={(e) =>
@@ -1472,7 +1589,8 @@ function RuleEditor({
             />
           )}
           <label className="field">
-            Müzik ne yapsın?
+            {" "}
+            {t("Müzik ne yapsın?")}{" "}
             <select
               value={value.action.kind}
               onChange={(e) =>
@@ -1485,15 +1603,17 @@ function RuleEditor({
                 })
               }
             >
-              <option value="play">Müziği çal</option>
-              <option value="pause">Müziği duraklat</option>
+              <option value="play">{t("Müziği çal")}</option>
+              <option value="pause">{t("Müziği duraklat")}</option>
             </select>
           </label>
           {value.action.kind === "play" && (
             <label className="field">
-              Müzik bağlantısı <span className="optional">isteğe bağlı</span>
+              {" "}
+              {t("Müzik bağlantısı")}{" "}
+              <span className="optional">{t("isteğe bağlı")}</span>
               <input
-                placeholder="Boş bırak: mevcut müziği devam ettir"
+                placeholder={t("Boş bırak: mevcut müziği devam ettir")}
                 value={value.action.playlist ?? ""}
                 onChange={(e) =>
                   setValue({
@@ -1504,13 +1624,18 @@ function RuleEditor({
               />
               <small>
                 {spotify
-                  ? "Spotify şarkı, liste, albüm veya YouTube Music şarkı, liste, radyo, mix bağlantısı yapıştır. Bağlantı seçili müzik kaynağıyla eşleştiğinde kullanılır."
-                  : "YouTube Music şarkı, liste, radyo veya mix bağlantısı yapıştır. Ayarlar’da YouTube Music kaynağı ve güncel tarayıcı eklentisi seçili olmalı. Spotify bağlantıları da kaydedilebilir."}
+                  ? t(
+                      "Spotify şarkı, liste, albüm veya YouTube Music şarkı, liste, radyo, mix bağlantısı yapıştır. Bağlantı seçili müzik kaynağıyla eşleştiğinde kullanılır.",
+                    )
+                  : t(
+                      "YouTube Music şarkı, liste, radyo veya mix bağlantısı yapıştır. Ayarlar’da YouTube Music kaynağı ve güncel tarayıcı eklentisi seçili olmalı. Spotify bağlantıları da kaydedilebilir.",
+                    )}
               </small>
             </label>
           )}
           <label className="field">
-            Öncelik
+            {" "}
+            {t("Öncelik")}{" "}
             <input
               type="number"
               required
@@ -1523,13 +1648,15 @@ function RuleEditor({
               }
             />
             <small>
-              Yüksek değer önce uygulanır. Duraklatma kuralları her zaman
-              öndedir.
+              {" "}
+              {t(
+                "Yüksek değer önce uygulanır. Duraklatma kuralları her zaman öndedir.",
+              )}{" "}
             </small>
           </label>
           {error && (
             <p className="form-error" role="alert">
-              {error}
+              {t(error)}
             </p>
           )}
           <div className="dialog-actions">
@@ -1539,8 +1666,7 @@ function RuleEditor({
                 className="text-button danger"
                 onClick={onDelete}
               >
-                <Trash2 size={15} />
-                Sil
+                <Trash2 size={15} /> {t("Sil")}{" "}
               </button>
             )}
             <button
@@ -1548,11 +1674,12 @@ function RuleEditor({
               className="button secondary"
               onClick={onClose}
             >
-              Vazgeç
+              {" "}
+              {t("Vazgeç")}{" "}
             </button>
             <button type="submit" className="button primary">
               <Check size={16} />
-              {busy ? "Kaydediliyor…" : "Kuralı uygula"}
+              {busy ? t("Kaydediliyor…") : t("Kuralı uygula")}
             </button>
           </div>
         </fieldset>

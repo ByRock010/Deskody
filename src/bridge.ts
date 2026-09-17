@@ -17,7 +17,8 @@ function preview(): Snapshot {
     const stored =
       localStorage.getItem(previewKey) ??
       localStorage.getItem(legacyPreviewKey);
-    if (stored) settings = JSON.parse(stored);
+    if (stored) settings = { ...settings, ...JSON.parse(stored) };
+    settings.language = settings.language === "tr" ? "tr" : "en";
   } catch {
     /* discard invalid preview state */
   }
@@ -57,8 +58,20 @@ export const api = {
   quickChange: (
     change:
       | { kind: "enabled"; enabled: boolean }
-      | { kind: "rule"; id: string; enabled: boolean },
-  ): Promise<Settings> => invoke("quick_change", { change }),
+      | { kind: "rule"; id: string; enabled: boolean }
+      | { kind: "language"; language: "en" | "tr" },
+  ): Promise<Settings> => {
+    if (desktop) return invoke("quick_change", { change });
+    const settings = preview().settings;
+    if (change.kind === "language") settings.language = change.language;
+    else if (change.kind === "enabled") settings.enabled = change.enabled;
+    else
+      settings.rules = settings.rules.map((r) =>
+        r.id === change.id ? { ...r, enabled: change.enabled } : r,
+      );
+    localStorage.setItem(previewKey, JSON.stringify(settings));
+    return Promise.resolve(settings);
+  },
   openMain: (): Promise<void> => invoke("open_main"),
   closePanel: (): Promise<void> => invoke("close_panel"),
   quit: (): Promise<void> => invoke("quit_app"),

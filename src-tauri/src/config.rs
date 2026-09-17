@@ -263,6 +263,27 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 mod tests {
     use super::*;
     #[test]
+    fn language_defaults_for_legacy_settings_and_survives_restart() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = Store::new(directory.path());
+        let mut legacy = serde_json::to_value(Settings::default()).unwrap();
+        legacy.as_object_mut().unwrap().remove("language");
+        legacy["rules"][0]["name"] = "Özel çalışma listem".into();
+        std::fs::write(&store.path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        let mut settings = store.load().unwrap();
+        assert_eq!(settings.language, Language::En);
+        assert_eq!(settings.rules[0].name, "Özel çalışma listem");
+        settings.language = Language::Tr;
+        store.save(&settings).unwrap();
+        assert_eq!(Store::new(directory.path()).load().unwrap(), settings);
+        settings.language = Language::En;
+        store.save(&settings).unwrap();
+        assert_eq!(Store::new(directory.path()).load().unwrap(), settings);
+        legacy["language"] = "unsupported".into();
+        assert!(serde_json::from_value::<Settings>(legacy).is_err());
+    }
+
+    #[test]
     fn multi_application_validation_and_legacy_roundtrip() {
         let old = Settings::default();
         let decoded: Settings =

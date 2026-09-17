@@ -72,7 +72,7 @@ static void action(const char *name, const char *rid, bool enabled) {
     if (self.expectedForegroundPID) require(self.foregroundPID == self.expectedForegroundPID, @"external fullscreen fixture is active");
     require(self.foregroundPID != NSProcessInfo.processInfo.processIdentifier, @"another app is active before opening");
     NSDictionary *data = @{
-        @"settings": @{@"enabled": @YES, @"rules": @[
+        @"settings": @{@"language": @"tr", @"enabled": @YES, @"rules": @[
             @{@"id":@"code",@"name":@"Ders çalışma",@"enabled":@YES,@"priority":@60,@"matcher":@{@"kind":@"app",@"value":@"Preview, Visual Studio Code"},@"action":@{@"kind":@"play"}},
             @{@"id":@"word",@"name":@"Word",@"enabled":@YES,@"priority":@50,@"matcher":@{@"kind":@"app",@"value":@"Microsoft Word"},@"action":@{@"kind":@"play"}}
         ]},
@@ -82,6 +82,9 @@ static void action(const char *name, const char *rid, bool enabled) {
     fixture = [NSJSONSerialization JSONObjectWithData:[NSJSONSerialization dataWithJSONObject:data options:0 error:nil] options:NSJSONReadingMutableContainers error:nil];
     publishFixture();
     self.statusItem = [NSStatusBar.systemStatusBar statusItemWithLength:NSVariableStatusItemLength];
+    NSData *catalogue = [NSData dataWithContentsOfFile:@"locales/en.json"];
+    require(catalogue != nil, @"shared translation catalogue loaded");
+    fixture[@"translations"] = [NSJSONSerialization JSONObjectWithData:catalogue options:0 error:nil];
     self.statusItem.button.image = symbol(@"waveform");
     require(deskody_menu_create((__bridge void *)self.statusItem, action), @"real NSStatusItem menu attached");
     self.testTimer = [NSTimer timerWithTimeInterval:0.35 target:self selector:@selector(step:) userInfo:nil repeats:YES];
@@ -132,6 +135,14 @@ static void action(const char *name, const char *rid, bool enabled) {
             break;
         case 4: {
             require(nativeMenu.ruleSwitches[@"word"].state == NSControlStateValueOff, @"rule toggle commits without closing menu");
+            fixture[@"settings"][@"language"] = @"en";
+            publishFixture();
+            break;
+        }
+        case 5: {
+            require([nativeMenu.play.accessibilityLabel isEqual:@"Play music"], @"open native menu switches to English from settings snapshot");
+            require(nativeMenu.ruleSwitches[@"word"].state == NSControlStateValueOff, @"language rebuild preserves committed rule state");
+            require(NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier == self.foregroundPID, @"language change does not activate Deskody");
             NSEvent *escape = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:0 timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:nativeMenu.content.window.windowNumber context:nil characters:@"\x1b" charactersIgnoringModifiers:@"\x1b" isARepeat:NO keyCode:53];
             [NSApp postEvent:escape atStart:NO];
             break;
