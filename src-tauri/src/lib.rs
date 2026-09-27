@@ -1,4 +1,5 @@
 pub mod applications;
+pub mod artwork;
 pub mod browser;
 pub mod config;
 #[cfg(feature = "desktop")]

@@ -256,6 +256,27 @@ impl Platform for Linux {
                     .unwrap_or_default()
                     .iter()
                     .any(|s| s == "spotify"),
+                track_id: metadata
+                    .get("mpris:trackid")
+                    .and_then(|v| <&zbus::zvariant::ObjectPath>::try_from(v).ok())
+                    .map(|p| p.as_str().to_owned())
+                    .unwrap_or_default(),
+                artwork: metadata
+                    .get("mpris:artUrl")
+                    .and_then(|v| <&str>::try_from(v).ok())
+                    .map(str::to_owned),
+                duration: metadata
+                    .get("mpris:length")
+                    .and_then(|v| i64::try_from(v).ok())
+                    .map(|v| v as f64 / 1_000_000.0),
+                position: proxy
+                    .get_property::<i64>("Position")
+                    .ok()
+                    .map(|v| v as f64 / 1_000_000.0),
+                sampled_at: Some(timestamp()),
+                can_seek: proxy.get_property("CanSeek").unwrap_or(false),
+                can_next: proxy.get_property("CanGoNext").unwrap_or(false),
+                can_previous: proxy.get_property("CanGoPrevious").unwrap_or(false),
                 id: id.clone(),
             });
         }
@@ -281,6 +302,20 @@ impl Platform for Linux {
         self.player(player)?
             .set_property("Volume", value.clamp(0.0, 1.0))
             .map_err(native)
+    }
+    fn transport(&mut self, player: &str, action: &TransportAction) -> Result<()> {
+        let proxy = self.player(player)?;
+        match action {
+            TransportAction::Next => proxy.call::<_, _, ()>("Next", &()).map_err(native),
+            TransportAction::Previous => proxy.call::<_, _, ()>("Previous", &()).map_err(native),
+            TransportAction::Seek { position, track_id } => {
+                let path = zbus::zvariant::ObjectPath::try_from(track_id.as_str())
+                    .map_err(|_| err("Geçersiz parça kimliği"))?;
+                proxy
+                    .call::<_, _, ()>("SetPosition", &(path, (position * 1_000_000.0) as i64))
+                    .map_err(native)
+            }
+        }
     }
     fn media_key(&mut self) -> Result<()> {
         if std::env::var_os("WAYLAND_DISPLAY").is_some() {

@@ -410,6 +410,39 @@ impl WithSpotify {
                 can_play: !restricted,
                 can_pause: !restricted,
                 can_open_uri: !restricted,
+                track_id: if current {
+                    state["item"]["uri"].as_str().unwrap_or("").into()
+                } else {
+                    String::new()
+                },
+                artwork: if current {
+                    state["item"]["album"]["images"][0]["url"]
+                        .as_str()
+                        .or_else(|| state["item"]["images"][0]["url"].as_str())
+                        .map(str::to_owned)
+                } else {
+                    None
+                },
+                duration: if current {
+                    state["item"]["duration_ms"].as_f64().map(|v| v / 1000.0)
+                } else {
+                    None
+                },
+                position: if current {
+                    state["progress_ms"].as_f64().map(|v| v / 1000.0)
+                } else {
+                    None
+                },
+                sampled_at: Some(timestamp()),
+                can_seek: current
+                    && !restricted
+                    && state["actions"]["disallows"]["seeking"].as_bool() != Some(true),
+                can_next: current
+                    && !restricted
+                    && state["actions"]["disallows"]["skipping_next"].as_bool() != Some(true),
+                can_previous: current
+                    && !restricted
+                    && state["actions"]["disallows"]["skipping_prev"].as_bool() != Some(true),
             });
         }
         self.cached = Some((Instant::now(), players.clone()));
@@ -490,6 +523,42 @@ impl Platform for WithSpotify {
             ),
             None,
         )?;
+        self.cached = None;
+        Ok(())
+    }
+    fn transport(&mut self, player: &str, action: &TransportAction) -> Result<()> {
+        if !player.starts_with("spotify:web:") {
+            return self.native.transport(player, action);
+        }
+        let id = Self::device(player)?;
+        let (method, path) = match action {
+            TransportAction::Next => (
+                reqwest::Method::POST,
+                format!("me/player/next?device_id={id}"),
+            ),
+            TransportAction::Previous => (
+                reqwest::Method::POST,
+                format!("me/player/previous?device_id={id}"),
+            ),
+            TransportAction::Seek { position, track_id } => {
+                let state = self
+                    .request(reqwest::Method::GET, "me/player", None)?
+                    .unwrap_or_default();
+                if state["item"]["uri"].as_str() != Some(track_id)
+                    || state["device"]["id"].as_str() != Some(id)
+                {
+                    return Err(err("Parça değişti; tekrar deneyin"));
+                }
+                (
+                    reqwest::Method::PUT,
+                    format!(
+                        "me/player/seek?device_id={id}&position_ms={}",
+                        (position * 1000.0) as u64
+                    ),
+                )
+            }
+        };
+        self.request(method, &path, None)?;
         self.cached = None;
         Ok(())
     }

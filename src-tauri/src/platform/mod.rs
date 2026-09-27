@@ -28,6 +28,9 @@ pub trait Platform: Send {
     }
     /// Explicit user action only: a global toggle has no reliable target/state.
     fn media_key(&mut self) -> Result<()>;
+    fn transport(&mut self, _player: &str, _action: &TransportAction) -> Result<()> {
+        Err(err("Oynatıcı bu medya kontrolünü desteklemiyor"))
+    }
 }
 
 pub fn create() -> Box<dyn Platform> {

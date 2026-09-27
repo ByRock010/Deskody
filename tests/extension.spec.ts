@@ -16,6 +16,7 @@ test("paired extension reports sanitized URLs to the loopback bridge", async () 
     commandError?: string;
     musicTransition?: boolean;
     musicVolume?: number;
+    music?: { track: string; artist: string; duration: number; position: number; canSeek: boolean; canNext: boolean; artwork: string };
   }[] = [];
   let command: {
     id: string;
@@ -24,6 +25,8 @@ test("paired extension reports sanitized URLs to the loopback bridge", async () 
     url?: string;
     fadeMs?: number;
     pause?: boolean;
+    position?: number;
+    trackId?: string;
   } | null = null;
   const server = createServer((request, response) => {
     let body = "";
@@ -40,7 +43,7 @@ test("paired extension reports sanitized URLs to the loopback bridge", async () 
       } catch {
         /* ignore non-JSON probes */
       }
-      response.writeHead(200, { "Content-Type": "application/json" });
+      response.writeHead(200, { "Content-Type": "application/json", "x-deskody-media-version": "1" });
       response.end(JSON.stringify(command));
     });
   });
@@ -128,12 +131,14 @@ test("paired extension reports sanitized URLs to the loopback bridge", async () 
       if (route.request().isNavigationRequest()) navigations++;
       return route.fulfill({
         contentType: "text/html",
-        body: `<title>Test music</title><ytmusic-app><div id="links"></div></ytmusic-app><video id="empty-preview"></video><div id="movie_player"><audio loop src="data:audio/wav;base64,${wav.toString("base64")}"></audio></div><button onclick="document.querySelector('audio').play()">Start</button>
+        body: `<title>Test music</title><ytmusic-app><div id="links"></div></ytmusic-app><video id="empty-preview"></video><div id="movie_player"><audio loop src="data:audio/wav;base64,${wav.toString("base64")}"></audio></div><button onclick="document.querySelector('audio').play()">Start</button><ytmusic-player-bar><button class="next-button" onclick="window.currentVideoId='bbbbbbbbbbb'; window.skips++">Next</button><button class="previous-button" onclick="window.currentVideoId='aaaaaaaaaaa'; window.skips++">Previous</button></ytmusic-player-bar>
         <script>
           window.documentIdentity = crypto.randomUUID();
           window.beforeUnloadCount = 0;
           window.routeCalls = 0;
           window.currentVideoId = 'aaaaaaaaaaa';
+          window.skips = 0;
+          navigator.mediaSession.metadata = new MediaMetadata({title: 'Fixture song', artist: 'Fixture artist', artwork:[{src:'https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg',sizes:'300x300'}]});
           window.metadataMode = 'response';
           window.normalizeUrl = true;
           window.replaceMedia = false;
@@ -193,6 +198,21 @@ test("paired extension reports sanitized URLs to the loopback bridge", async () 
         .locator("audio")
         .evaluate((element: HTMLAudioElement) => element.paused),
     ).toBe(true);
+    expect(bodies[0].music).toBeUndefined(); // New metadata is negotiated, safe for old desktop versions.
+    await expect.poll(() => bodies.some(b => b.music?.canSeek && b.music.canNext && b.music.track === "Fixture song" && b.music.artist === "Fixture artist")).toBe(true);
+    expect(bodies.find(b => b.music?.canSeek)?.music?.duration).toBeCloseTo(1);
+    command = { id: "seek-test", action: "seek", volume: null, position: 0.5, trackId: "aaaaaaaaaaa" };
+    await expect.poll(() => bodies.some(b => b.acknowledged === "seek-test" && !b.commandError)).toBe(true);
+    expect(await page.locator("audio").evaluate((e:HTMLAudioElement)=>e.currentTime)).toBeCloseTo(0.5, 1);
+    expect(await page.locator("audio").evaluate((e:HTMLAudioElement)=>e.paused)).toBe(true);
+    for (const action of ["next", "previous"]) {
+      command = { id: `${action}-test`, action, volume: null };
+      await expect.poll(() => bodies.filter(b => b.acknowledged === `${action}-test` && !b.commandError).length).toBeGreaterThan(1);
+    }
+    expect(await page.evaluate(()=>(window as any).skips)).toBe(2);
+    command = { id: "stale-seek", action: "seek", volume: null, position: 0.1, trackId: "bbbbbbbbbbb" };
+    await expect.poll(() => bodies.find(b => b.acknowledged === "stale-seek")?.commandError).toContain("Parça değişti");
+    expect(await page.locator("audio").evaluate((e:HTMLAudioElement)=>e.currentTime)).toBeCloseTo(0.5, 1);
     command = { id: "volume-test", action: "volume", volume: 0.2 };
     await expect
       .poll(() =>

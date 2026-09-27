@@ -439,5 +439,16 @@
   "Video izleme · kesici kural": "Watching video · interruption rule",
   "Uygulama kataloğu okunamadı": "Could not read application catalogue",
   "Duraklat": "Pause",
-  "{} · bulunamadı": "{} · not found"
+  "{} · bulunamadı": "{} · not found",
+  "Albüm kapağı": "Album artwork",
+  "Oynatma konumu": "Playback position",
+  "Önceki parça": "Previous track",
+  "Sonraki parça": "Next track",
+  "Seçili oynatıcı değişti; tekrar deneyin": "The selected player changed; try again",
+  "Parça değişti; tekrar deneyin": "The track changed; try again",
+  "Geçersiz oynatma konumu": "Invalid playback position",
+  "Bu parçada konum değiştirme desteklenmiyor": "Seeking is unavailable for this track",
+  "Oynatıcı bu medya kontrolünü desteklemiyor": "This player does not support this media control",
+  "Oynatıcı medya komutunu reddetti": "The player rejected the media command",
+  "Geçersiz parça kimliği": "Invalid track identity"
 }

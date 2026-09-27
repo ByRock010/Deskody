@@ -5,6 +5,7 @@ static void require(BOOL ok, NSString *message) {
 }
 static NSMutableDictionary *fixture;
 static BOOL failNext;
+static NSDictionary *lastTransport;
 static void publishFixture(void) {
     NSData *data = [NSJSONSerialization dataWithJSONObject:fixture options:0 error:nil];
     NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
@@ -12,7 +13,7 @@ static void publishFixture(void) {
 }
 static void action(const char *name, const char *rid, bool enabled) {
     NSString *command = [NSString stringWithUTF8String:name];
-    if ([command isEqual:@"refresh"]) return;
+    if ([command isEqual:@"refresh"] || [command isEqual:@"observe"]) return;
     BOOL failure = failNext; failNext = NO;
     if (!failure) {
         if ([command isEqual:@"enabled"]) fixture[@"settings"][@"enabled"] = @(enabled);
@@ -20,6 +21,11 @@ static void action(const char *name, const char *rid, bool enabled) {
             for (NSMutableDictionary *rule in fixture[@"settings"][@"rules"]) {
                 if ([rule[@"id"] isEqual:[NSString stringWithUTF8String:rid]]) rule[@"enabled"] = @(enabled);
             }
+        }
+        if ([command isEqual:@"transport"]) {
+            NSData *data = [[NSString stringWithUTF8String:rid] dataUsingEncoding:NSUTF8StringEncoding];
+            lastTransport = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            if ([lastTransport[@"action"][@"kind"] isEqual:@"seek"]) fixture[@"status"][@"player"][@"position"] = lastTransport[@"action"][@"position"];
         }
         if ([command isEqual:@"pause"]) fixture[@"status"][@"player"][@"playing"] = @NO;
     }
@@ -37,6 +43,7 @@ static void action(const char *name, const char *rid, bool enabled) {
 @property pid_t foregroundPID;
 @property pid_t expectedForegroundPID;
 @property NSInteger stage;
+@property NSInteger layoutTicks;
 @property(strong) NSTimer *testTimer;
 @end
 @implementation MenuTest
@@ -77,7 +84,7 @@ static void action(const char *name, const char *rid, bool enabled) {
             @{@"id":@"word",@"name":@"Word",@"enabled":@YES,@"priority":@50,@"matcher":@{@"kind":@"app",@"value":@"Microsoft Word"},@"action":@{@"kind":@"play"}}
         ]},
         @"status": @{@"context":@{@"app":@"Visual Studio Code"},@"activeRule":@"code",@"manualOverride":@NO,
-            @"player":@{@"track":@"A Walk Through the Quiet City",@"artist":@"Sunday Study Sessions",@"playing":@YES,@"canPlay":@YES,@"canPause":@YES}}
+            @"player":@{@"id":@"browser:music.youtube.com",@"name":@"YouTube Music",@"artwork":@"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aCFsAAAAASUVORK5CYII=",@"trackId":@"track-a",@"duration":@180,@"position":@35,@"canSeek":@YES,@"canNext":@YES,@"canPrevious":@YES,@"track":@"A Walk Through the Quiet City",@"artist":@"Sunday Study Sessions",@"playing":@YES,@"canPlay":@YES,@"canPause":@YES}}
     };
     fixture = [NSJSONSerialization JSONObjectWithData:[NSJSONSerialization dataWithJSONObject:data options:0 error:nil] options:NSJSONReadingMutableContainers error:nil];
     publishFixture();
@@ -91,7 +98,7 @@ static void action(const char *name, const char *rid, bool enabled) {
     [NSRunLoop.mainRunLoop addTimer:self.testTimer forMode:NSEventTrackingRunLoopMode];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 300 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
         [self.statusItem.button performClick:nil];
-        require(self.stage >= 5, @"menu actions complete before dismissal");
+        require(self.stage >= 9, @"menu actions complete before dismissal");
         require(!nativeMenu.tracking && !nativeMenu.timer, @"AppKit dismissal removes tracking timer");
         require(NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier == self.foregroundPID, @"closing preserves the other application");
         [self.testTimer invalidate];
@@ -105,12 +112,16 @@ static void action(const char *name, const char *rid, bool enabled) {
 }
 - (void)step:(NSTimer *)timer {
     require(nativeMenu.tracking, @"native menu stays open during control actions");
+    // Menu tracking starts before its window finishes attaching/animating in a Space.
+    // Keep the assertion, but allow AppKit up to 3.5 seconds to finish that work.
+    if (self.stage == 0 && !(nativeMenu.content.window.onActiveSpace && nativeMenu.content.window.visible) && self.layoutTicks++ < 10) return;
     switch (self.stage++) {
         case 0: {
             require(nativeMenu.content.window.onActiveSpace && nativeMenu.content.window.visible, @"menu visible in current Space");
             require(NSMenu.menuBarVisible, @"system menu bar visible while tracking");
             require(self.statusItem.button.cell.highlighted, @"status icon has system selection highlight");
             require(NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier == self.foregroundPID, @"opening does not activate Deskody");
+            require(nativeMenu.cover.image != nil && nativeMenu.cover.contentTintColor == nil, @"album artwork decoded by AppKit");
             require([nativeMenu.flow isKindOfClass:NSSwitch.class], @"real AppKit switch, no webview");
             NSView *view = nativeMenu.content.window.contentView;
             NSBitmapImageRep *image = [view bitmapImageRepForCachingDisplayInRect:view.bounds];
@@ -143,6 +154,22 @@ static void action(const char *name, const char *rid, bool enabled) {
             require([nativeMenu.play.accessibilityLabel isEqual:@"Play music"], @"open native menu switches to English from settings snapshot");
             require(nativeMenu.ruleSwitches[@"word"].state == NSControlStateValueOff, @"language rebuild preserves committed rule state");
             require(NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier == self.foregroundPID, @"language change does not activate Deskody");
+            require(nativeMenu.seek.enabled && nativeMenu.next.enabled && nativeMenu.previous.enabled, @"native transport capabilities enable controls");
+            [nativeMenu.next performClick:nil];
+            break;
+        }
+        case 6:
+            require([lastTransport[@"action"][@"kind"] isEqual:@"next"], @"next sends a targeted transport request");
+            [nativeMenu.previous performClick:nil];
+            break;
+        case 7:
+            require([lastTransport[@"action"][@"kind"] isEqual:@"previous"], @"previous sends a targeted transport request");
+            nativeMenu.seek.doubleValue = 75;
+            [nativeMenu seekChanged:nativeMenu.seek];
+            break;
+        case 8: {
+            require([lastTransport[@"action"][@"kind"] isEqual:@"seek"] && [lastTransport[@"action"][@"trackId"] isEqual:@"track-a"] && [lastTransport[@"action"][@"position"] doubleValue] == 75, @"seek carries position and captured track identity");
+            require([nativeMenu.elapsed.stringValue isEqual:@"1:15"], @"paused timeline reflects successful seek");
             NSEvent *escape = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:0 timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:nativeMenu.content.window.windowNumber context:nil characters:@"\x1b" charactersIgnoringModifiers:@"\x1b" isARepeat:NO keyCode:53];
             [NSApp postEvent:escape atStart:NO];
             break;

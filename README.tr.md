@@ -124,6 +124,16 @@ Mevcut YouTube Music sekmesinde sayfa içi (`yt-navigate`) yönlendirme kullanı
 
 Bağlantı açma işlemi en fazla 16 saniye onay bekler. Kullanıcının yeni kaydetme/duraklatma/kapatma komutu beklemeyi iptal eder; bekleyen eklenti işlemi de iptal edilir. Yeni bağlam taraması mevcut geçiş tamamlandıktan sonra yapılır. YouTube Music'in sayfa yapısı değişirse liste sayfasından ilk şarkıyı bulma uyarlama gerektirebilir; doğrudan `watch` bağlantıları bu adıma ihtiyaç duymaz.
 
+## Çalan müzik kontrolleri
+
+Ana pencere ve hızlı kontrollerde albüm kapağı, parça/sanatçı, geçen/toplam süre, seek çubuğu ve önceki/oynat-duraklat/sonraki düğmeleri bulunur. Komutlar seçili oynatıcıya gider; penceresini öne getirmez. Duraklatılmış parçada seek yapmak müziği başlatmaz; parça atlamak kuralın listesini yeniden açmaz. Oynatıcının desteklemediğini bildirdiği kontroller (reklam/canlı yayın/hesap kısıtları dahil) pasif kalır. Kapak yüklenemezse müzik simgesi gösterilir.
+
+- **macOS Spotify:** açık masaüstü uygulamasının JXA arayüzü kullanılır. Bu yerel kontroller için Premium, eklenti veya Developer Client ID gerekmez; Spotify'ın kendi oynatma kısıtları geçerlidir.
+- **Windows Spotify:** kapak, süre ve desteklenen kontroller GSMTC üzerinden alınır. Bu kontroller için eklenti veya Web API gerekmez. Kuraldan belirli bir içerik bağlantısını başlatma özelliği ise halen Web API gerektirir.
+- **macOS/Windows YouTube Music:** **Deskody Bridge 0.1.7+** yükleyin, eklentiyi yeniden yükleyip açık YTM sekmesini/PWA'yı yenileyin. Mevcut eşleştirme korunur. Eski eklentide oynat/duraklat çalışır; yeni kontroller gelmez.
+
+Medya kontrolleri görünürken konum daha sık güncellenir; gizli pencereler bu hızlı taramayı sürdürmez. [Medya entegrasyonunun ayrıntıları ve sınırları](docs/MEDIA-CONTROLS.md).
+
 ## Paketleme
 
 Paketleri hedef işletim sisteminde üretin:
@@ -190,7 +200,7 @@ Gerçek Spotify/Apple Music hesapları, macOS TCC izinleri ve fiziksel Windows/L
 
 Varsayılan yol işletim sisteminin uygulama ayar dizinidir (`dev.musicoptimizer.desktop`). `DESKODY_CONFIG_DIR` ortam değişkeniyle ayrı bir ayar dizini seçilebilir; testlerde kullanıcı ayarlarını etkilemeden çalıştırmak içindir. OAuth token'ları bu override'dan bağımsız olarak sistem güvenli deposundadır.
 
-Ayarlar geçici dosya + fsync + atomik değiştirme ile kaydedilir. Bozuk veya bilinmeyen sürümlü ayarlar otomatik olarak silinmez; otomasyon kapalı başlar ve hata görünür. Kullanıcı kaydettiğinde dosya yenilenir. En fazla 100 kural kabul edilir. Son 40 etkinlik yalnızca bellektedir; aktif pencere başlığı ve temizlenmiş URL diske yazılmaz. Spotify Web API kapalıyken uygulamanın buluta veri gönderen bir özelliği yoktur.
+Ayarlar geçici dosya + fsync + atomik değiştirme ile kaydedilir. Bozuk veya bilinmeyen sürümlü ayarlar otomatik olarak silinmez; otomasyon kapalı başlar ve hata görünür. Kullanıcı kaydettiğinde dosya yenilenir. En fazla 100 kural kabul edilir. Son 40 etkinlik yalnızca bellektedir; aktif pencere başlığı ve temizlenmiş URL diske yazılmaz. Medya kontrolleri görünürken Deskody, izin verilen Spotify/YouTube kapak CDN’lerinden görsel isteyebilir. İndirmeler boyut ve süreyle sınırlıdır, yönlendirme izlemez ve yalnızca bellekte önbelleğe alınır. Görsel sağlayıcı normal ağ metadatasını görebilir; kurallar ve aktif uygulama/tarayıcı bağlamı bu isteklere eklenmez. İsteğe bağlı Spotify Web API ayrıca kimliği doğrulanmış istekler yapar.
 
 
 ### macOS sistem menüsü (0.1.9)

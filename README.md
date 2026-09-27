@@ -60,6 +60,16 @@ The macOS menu works in other Spaces and over fullscreen applications without ac
 
 The main window opens on first installation. With saved settings, later launches start in the menu bar. Reopening the app from Finder brings up the main window. Quick changes synchronize with the main window while preserving unrelated unsaved edits; opening Deskody does not replace the last external work context.
 
+## Now playing controls
+
+The main window and quick controls show album artwork, track/artist, elapsed/total time, a seek bar and previous/play-pause/next buttons. Controls target the selected player without activating its window. Seeking a paused track keeps it paused; skipping does not restart the rule's playlist. Unsupported controls (including restricted/ad/live playback) are disabled when the player reports that limitation. Covers unavailable offline use a music icon.
+
+- **Spotify on macOS:** the running desktop app's JXA interface supplies metadata and transport controls; no extension, Premium or Developer Client ID is required for this local route. Spotify's own playback restrictions still apply.
+- **Spotify on Windows:** GSMTC supplies artwork, timeline and supported transport controls. No extension or Web API is needed for these controls. Starting a particular content link from a rule still requires Web API.
+- **YouTube Music on macOS/Windows:** update to **Deskody Bridge 0.1.7+**, reload the extension and refresh the open YTM tab/PWA. Existing pairing is retained. Older extensions retain play/pause, but cannot provide the new controls.
+
+Position updates more frequently while controls are visible; hidden windows do not keep that faster polling alive. See [media integration details and limits](docs/MEDIA-CONTROLS.md).
+
 ## Platform capabilities
 
 | Capability | macOS | Windows | Linux |
@@ -214,6 +224,6 @@ Real accounts, macOS TCC permissions and physical Windows/Linux desktop sessions
 
 Settings use the OS application configuration directory under `dev.musicoptimizer.desktop`. `DESKODY_CONFIG_DIR` selects a separate directory for testing; legacy `MUSIC_OPTIMIZER_CONFIG_DIR` remains supported with lower precedence. OAuth credentials are stored separately in the OS credential store.
 
-Writes use a temporary file, fsync and atomic replacement. Corrupt or unknown-version settings are not silently deleted: automation starts disabled with an error, and saving replaces the file. Up to 100 rules are accepted. Only the latest 40 activity events are kept in memory; active window titles and sanitized URLs are not written to disk. With Spotify Web API disabled, Deskody has no feature that sends data to a cloud service.
+Writes use a temporary file, fsync and atomic replacement. Corrupt or unknown-version settings are not silently deleted: automation starts disabled with an error, and saving replaces the file. Up to 100 rules are accepted. Only the latest 40 activity events are kept in memory; active window titles and sanitized URLs are not written to disk. While media controls are visible, Deskody may request album artwork from allowlisted Spotify/YouTube artwork CDNs. Downloads have a size/time limit, follow no redirects and are cached only in memory. These requests expose the usual network metadata to the artwork provider; rules and active-app/browser context are not included. Optional Spotify Web API makes its own authenticated requests.
 
 The app is **Deskody**, the extension **Deskody Bridge**, the macOS bundle `Deskody.app` and executable `deskody`. The displayed version comes directly from `package.json`. Legacy bundle identifiers, configuration paths, Spotify keyring service, Firefox extension ID and internal bridge events are intentionally retained so existing permissions, settings and pairing survive updates.

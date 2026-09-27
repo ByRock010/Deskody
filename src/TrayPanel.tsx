@@ -1,3 +1,4 @@
+import MediaControls from "./MediaControls";
 import { t, useLanguage, setLanguage } from "./i18n";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -5,10 +6,8 @@ import {
   AudioLines,
   Check,
   Headphones,
-  ListFilter,
-  Music2,
   Pause,
-  Play,
+  ListFilter,
   Power,
   RefreshCw,
   RotateCcw,
@@ -192,58 +191,9 @@ export default function TrayPanel() {
               </div>
             </section>
             <section className="tray-player" aria-label={t("Oynatıcı")}>
-              <div className="tray-row">
-                <span className="tray-art">
-                  <Music2 size={23} />
-                </span>
-                <div className="tray-track">
-                  <p className="tray-eyebrow">
-                    {player?.name || t("Müzik oynatıcı")}
-                  </p>
-                  <h2 title={player?.track}>
-                    {player?.track ||
-                      (player
-                        ? t("Parça bilgisi yok")
-                        : t("Oynatıcı bekleniyor"))}
-                  </h2>
-                  <p title={player?.artist}>
-                    {player?.artist ||
-                      (player
-                        ? player.playing === true
-                          ? t("Çalıyor")
-                          : player.playing === false
-                            ? t("Duraklatıldı")
-                            : t("Durum bilinmiyor")
-                        : t("Spotify veya YouTube Music’i aç"))}
-                  </p>
-                </div>
-                <button
-                  className="tray-play"
-                  aria-label={
-                    player?.playing === true
-                      ? t("Müziği duraklat")
-                      : t("Müziği çal")
-                  }
-                  disabled={
-                    disabled ||
-                    !player ||
-                    (player.playing === true
-                      ? !player.canPause
-                      : !player.canPlay)
-                  }
-                  onClick={() =>
-                    void run(() =>
-                      api.media(player?.playing === true ? "pause" : "play"),
-                    )
-                  }
-                >
-                  {player?.playing === true ? (
-                    <Pause size={19} fill="currentColor" />
-                  ) : (
-                    <Play size={19} fill="currentColor" />
-                  )}
-                </button>
-              </div>
+              <MediaControls compact player={player} disabled={disabled}
+                onMedia={action => void run(() => api.media(action))}
+                onTransport={request => void run(() => api.transport(request))} />
               {status?.manualOverride && (
                 <button
                   className="tray-resume"

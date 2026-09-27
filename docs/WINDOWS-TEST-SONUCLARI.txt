@@ -34,3 +34,12 @@ Tekrarlandığında aynı sonuç oluyor mu:
 Varsa ekran görüntüsü/video dosyasının adı:
 
 Eşleştirme anahtarı, token veya kişisel ayar dosyası eklemeyin.
+
+MULTİMEDYA KONTROLLERİ
+[ ] Spotify açıkken kapak, sanatçı ve süre bilgisi görünüyor.
+[ ] Önceki/sonraki parça yalnızca seçili oynatıcıda çalışıyor; Spotify öne gelmiyor.
+[ ] Seek çubuğu konumu değiştiriyor; duraklatılmış müzik kendiliğinden başlamıyor.
+[ ] YouTube Music için Bridge 0.1.7+ yeniden yüklendi ve YTM sekmesi yenilendi.
+[ ] YTM kapak/süre, önceki/sonraki ve seek çalışıyor; sekme veya PWA öne gelmiyor.
+[ ] Reklam veya desteklenmeyen seek durumunda kontrol pasif/hata görünür; uygulama donmuyor.
+[ ] Parça değişiminde kapak/süre yenileniyor; kuralın listesi baştan açılmıyor.

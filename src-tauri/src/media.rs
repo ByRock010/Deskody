@@ -19,6 +19,10 @@ pub struct Controller {
 }
 
 impl Controller {
+    pub fn transport_requested(&mut self) {
+        // Transient buffering during skip/seek is not a manual pause.
+        self.last_action = Some(Instant::now());
+    }
     pub fn observe(&mut self, player: Option<&Player>) {
         if self
             .last_action

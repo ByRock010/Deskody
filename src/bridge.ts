@@ -5,6 +5,7 @@ import type {
   Snapshot,
   Permissions,
   InstalledApplication,
+  TransportRequest,
 } from "./types";
 import { defaultSettings } from "./settings";
 
@@ -92,6 +93,8 @@ export const api = {
   },
   permission: (kind: string): Promise<Permissions> =>
     invoke("request_permission", { kind }),
+  transport: (request: TransportRequest): Promise<void> => invoke("media_transport", { request }),
+  observeMedia: (): Promise<void> => desktop ? invoke("observe_media") : Promise.resolve(),
   media: (action: string): Promise<void> => invoke("media_action", { action }),
   refresh: (): Promise<void> =>
     desktop ? invoke("refresh_status") : Promise.resolve(),

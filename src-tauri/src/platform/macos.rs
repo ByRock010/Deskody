@@ -139,7 +139,20 @@ impl Platform for MacOs {
     }
     fn players(&mut self, _: &Settings) -> Result<Vec<Player>> {
         let output = script(
-            r#"function run(){ let result=[]; for(const id of ['com.spotify.client','com.apple.Music']) { const a=Application(id); if(!a.running())continue; const state=a.playerState(); let name='',artist=''; try { name=a.currentTrack.name();artist=a.currentTrack.artist(); }catch(_){} result.push({id:id,name:id==='com.spotify.client'?'Spotify':'Apple Music',playing:state==='playing',volume:a.soundVolume()/100,track:name,artist:artist,canPlay:true,canPause:true,canOpenUri:id==='com.spotify.client'}); }return JSON.stringify(result); }"#,
+            r#"function run(){
+              let result=[];
+              for(const id of ['com.spotify.client','com.apple.Music']) {
+                const a=Application(id); if(!a.running())continue;
+                const state=a.playerState(); let track='',artist='',trackId='',artwork=null,duration=null,position=null;
+                try { const t=a.currentTrack; track=t.name();artist=t.artist();trackId=String(id==='com.spotify.client'?t.id():t.persistentID());duration=t.duration();
+                  // Spotify exposes duration in milliseconds despite older sdef text saying seconds.
+                  if(id==='com.spotify.client')duration/=1000;
+                  if(id==='com.spotify.client')artwork=t.artworkUrl();
+                  position=a.playerPosition();
+                }catch(_){}
+                result.push({id,name:id==='com.spotify.client'?'Spotify':'Apple Music',playing:state==='playing',volume:a.soundVolume()/100,track,artist,trackId,artwork,duration,position,sampledAt:Date.now()/1000,canSeek:!!trackId && !trackId.startsWith('spotify:ad:') && duration>0,canNext:!!trackId && !trackId.startsWith('spotify:ad:'),canPrevious:!!trackId && !trackId.startsWith('spotify:ad:'),canPlay:true,canPause:true,canOpenUri:id==='com.spotify.client'});
+              } return JSON.stringify(result);
+            }"#,
             &[],
         );
         match output {
@@ -177,6 +190,31 @@ impl Platform for MacOs {
         ensure_player(player)?;
         let value = (value.clamp(0.0, 1.0) * 100.0).round().to_string();
         script("function run(a){ const s=Application(a[0]); if(s.running())s.soundVolume=Number(a[1]); }", &[player, &value])?;
+        Ok(())
+    }
+    fn transport(&mut self, player: &str, action: &TransportAction) -> Result<()> {
+        ensure_player(player)?;
+        let (kind, value, track) = match action {
+            TransportAction::Next => ("next", String::new(), String::new()),
+            TransportAction::Previous => ("previous", String::new(), String::new()),
+            TransportAction::Seek { position, track_id } => {
+                ("seek", position.to_string(), track_id.clone())
+            }
+        };
+        script(
+            r#"function run(args) {
+          const a=Application(args[0]); if(!a.running())throw Error('Oynatıcı kapalı');
+          if(args[1]==='next')a.nextTrack();
+          else if(args[1]==='previous')a.previousTrack();
+          else {
+            const id=String(args[0]==='com.spotify.client'?a.currentTrack.id():a.currentTrack.persistentID());
+            if(id!==args[3])throw Error('Parça değişti; tekrar deneyin');
+            const position=Number(args[2]); if(!Number.isFinite(position)||position<0)throw Error('Geçersiz oynatma konumu');
+            a.playerPosition=position;
+          }
+        }"#,
+            &[player, kind, &value, &track],
+        )?;
         Ok(())
     }
     fn media_key(&mut self) -> Result<()> {

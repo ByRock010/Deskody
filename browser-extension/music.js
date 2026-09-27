@@ -36,6 +36,8 @@
             operation: command.id,
             volume: command.volume,
             muted: command.muted,
+            position: command.position,
+            trackId: command.trackId,
           }),
         }),
       );
@@ -172,7 +174,11 @@
             playing: s.playing,
             volume: s.volume,
             muted: s.muted,
-            title: document.title,
+            title: s.track || document.title,
+            media: { trackId: s.videoId || "", track: s.track || document.title,
+              artist: s.artist || "", artwork: s.artwork, duration: s.duration,
+              position: s.time, sampledAt: s.sampledAt, canSeek: s.canSeek,
+              canNext: s.canNext, canPrevious: s.canPrevious },
           }),
         )
         .catch(() => reply({ canOpen: false, canTransition: false }));
@@ -203,7 +209,7 @@
           operations.delete(operations.keys().next().value);
         return promise;
       }
-      if (!["play", "pause", "volume", "restore"].includes(command.action))
+      if (!["play", "pause", "volume", "restore", "next", "previous", "seek"].includes(command.action))
         throw new Error("Geçersiz medya komutu");
       if (active) {
         active.controller.abort(

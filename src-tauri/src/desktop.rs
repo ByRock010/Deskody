@@ -92,6 +92,10 @@ mod mac_menu {
             let _ = app.run_on_main_thread(move || show(&handle));
             return;
         }
+        if action == "observe" {
+            app.state::<Service>().observe_media();
+            return;
+        }
         if action == "refresh" {
             app.state::<Service>().refresh();
             return;
@@ -112,6 +116,10 @@ mod mac_menu {
                     .quick_change(QuickChange::Rule { id: rule, enabled })
                     .await
                     .map(|_| ()),
+                "transport" => match serde_json::from_str(&rule) {
+                    Ok(request) => service.transport(request).await,
+                    Err(_) => Err(crate::model::err("Geçersiz medya komutu")),
+                },
                 "play" | "pause" | "resumeAutomation" => service.media(action).await,
                 _ => Err(crate::model::err("Bilinmeyen menü komutu")),
             };
@@ -130,6 +138,20 @@ mod mac_menu {
                 deskody_menu_result(error.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()));
             }
         });
+    }
+}
+
+#[tauri::command]
+async fn media_transport(
+    request: crate::model::TransportRequest,
+    service: State<'_, Service>,
+) -> Result<(), String> {
+    service.transport(request).await.map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn observe_media(window: tauri::WebviewWindow, service: State<'_, Service>) {
+    if window.is_visible().unwrap_or(false) {
+        service.observe_media();
     }
 }
 
@@ -330,6 +352,8 @@ pub fn run() {
             let _ = app.run_on_main_thread(move || show(&handle));
         }))
         .invoke_handler(tauri::generate_handler![
+            media_transport,
+            observe_media,
             quick_change,
             open_main,
             close_panel,

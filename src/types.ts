@@ -56,6 +56,14 @@ export interface Player {
   canPlay: boolean;
   canPause: boolean;
   canOpenUri: boolean;
+  trackId?: string;
+  artwork?: string | null;
+  duration?: number | null;
+  position?: number | null;
+  sampledAt?: number | null;
+  canSeek?: boolean;
+  canNext?: boolean;
+  canPrevious?: boolean;
 }
 export interface Permissions {
   accessibility: boolean;
@@ -94,3 +102,6 @@ export interface ActivityEntry {
     action: string;
   };
 }
+
+export type TransportAction = { kind: "next" | "previous" } | { kind: "seek"; position: number; trackId: string };
+export interface TransportRequest { playerId: string; action: TransportAction }

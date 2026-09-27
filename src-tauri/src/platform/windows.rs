@@ -17,6 +17,7 @@ use ::windows::{
 #[derive(Default)]
 pub struct Windows {
     initialized: bool,
+    cover: Option<(String, std::time::Instant, Option<String>)>,
 }
 fn native(e: ::windows::core::Error) -> Error {
     err(format!("Windows: {e}"))
@@ -178,7 +179,7 @@ impl Platform for Windows {
             Err(err("Bilinmeyen izin"))
         }
     }
-    fn players(&mut self, _: &Settings) -> Result<Vec<Player>> {
+    fn players(&mut self, settings: &Settings) -> Result<Vec<Player>> {
         self.init()?;
         let manager = SessionManager::RequestAsync()
             .map_err(native)?
@@ -200,6 +201,44 @@ impl Platform for Windows {
                 None
             };
             let can_open_uri = false;
+            let track_id = media_identity(&metadata);
+            let playing = info.PlaybackStatus().map_err(native)? == Playback::Playing;
+            let timeline = session.GetTimelineProperties().ok();
+            let start = timeline
+                .as_ref()
+                .and_then(|t| t.StartTime().ok())
+                .map_or(0.0, |t| t.Duration as f64 / 10_000_000.0);
+            let duration = timeline
+                .as_ref()
+                .and_then(|t| t.EndTime().ok())
+                .map(|t| t.Duration as f64 / 10_000_000.0 - start);
+            let position = timeline.as_ref().and_then(|t| t.Position().ok()).map(|t| {
+                let updated = timeline
+                    .as_ref()
+                    .and_then(|t| t.LastUpdatedTime().ok())
+                    .map(|t| t.UniversalTime as f64 / 10_000_000.0 - 11_644_473_600.0);
+                let elapsed = if playing {
+                    updated.map_or(0.0, |at| (timestamp() - at).clamp(0.0, 604800.0))
+                } else {
+                    0.0
+                };
+                t.Duration as f64 / 10_000_000.0 - start
+                    + elapsed * info.PlaybackRate().and_then(|r| r.Value()).unwrap_or(1.0)
+            });
+            let selected = (settings.provider == Provider::Spotify && is_spotify_id(&id))
+                || id == settings.target_player;
+            let artwork =
+                if selected && !track_id.is_empty() {
+                    let key = format!("{id}:{track_id}");
+                    if !self.cover.as_ref().is_some_and(|c| {
+                        c.0 == key && (c.2.is_some() || c.1.elapsed().as_secs() < 15)
+                    }) {
+                        self.cover = Some((key, std::time::Instant::now(), thumbnail(&metadata)));
+                    }
+                    self.cover.as_ref().and_then(|c| c.2.clone())
+                } else {
+                    None
+                };
             result.push(Player {
                 name: id.clone(),
                 id,
@@ -210,6 +249,14 @@ impl Platform for Windows {
                 can_play: controls.IsPlayEnabled().map_err(native)?,
                 can_pause: controls.IsPauseEnabled().map_err(native)?,
                 can_open_uri,
+                track_id,
+                artwork,
+                duration,
+                position,
+                sampled_at: Some(timestamp()),
+                can_seek: controls.IsPlaybackPositionEnabled().unwrap_or(false),
+                can_next: controls.IsNextEnabled().unwrap_or(false),
+                can_previous: controls.IsPreviousEnabled().unwrap_or(false),
             });
         }
         Ok(result)
@@ -249,6 +296,39 @@ impl Platform for Windows {
         }
         unsafe {
             spotify_volume(Some(value as f32))?;
+        }
+        Ok(())
+    }
+    fn transport(&mut self, player: &str, action: &TransportAction) -> Result<()> {
+        let session = self.session(player)?;
+        let accepted = match action {
+            TransportAction::Next => session.TrySkipNextAsync(),
+            TransportAction::Previous => session.TrySkipPreviousAsync(),
+            TransportAction::Seek { position, track_id } => {
+                let metadata = session
+                    .TryGetMediaPropertiesAsync()
+                    .map_err(native)?
+                    .get()
+                    .map_err(native)?;
+                if media_identity(&metadata) != *track_id {
+                    return Err(err("Parça değişti; tekrar deneyin"));
+                }
+                let timeline = session.GetTimelineProperties().map_err(native)?;
+                let target = timeline.StartTime().map_err(native)?.Duration
+                    + (position * 10_000_000.0) as i64;
+                if target < timeline.MinSeekTime().map_err(native)?.Duration
+                    || target > timeline.MaxSeekTime().map_err(native)?.Duration
+                {
+                    return Err(err("Bu parçada konum değiştirme desteklenmiyor"));
+                }
+                session.TryChangePlaybackPositionAsync(target)
+            }
+        }
+        .map_err(native)?
+        .get()
+        .map_err(native)?;
+        if !accepted {
+            return Err(err("Oynatıcı medya komutunu reddetti"));
         }
         Ok(())
     }
@@ -350,4 +430,40 @@ unsafe fn audio_active(settings: &Settings) -> Result<bool> {
         }
     }
     Ok(false)
+}
+
+fn media_identity(
+    metadata: &::windows::Media::Control::GlobalSystemMediaTransportControlsSessionMediaProperties,
+) -> String {
+    let title = metadata.Title().unwrap_or_default().to_string();
+    if title.is_empty() {
+        return String::new();
+    }
+    format!(
+        "{}|{}|{}",
+        title,
+        metadata.Artist().unwrap_or_default(),
+        metadata.AlbumTitle().unwrap_or_default()
+    )
+}
+fn thumbnail(
+    metadata: &::windows::Media::Control::GlobalSystemMediaTransportControlsSessionMediaProperties,
+) -> Option<String> {
+    use ::windows::Storage::Streams::DataReader;
+    let stream = metadata
+        .Thumbnail()
+        .ok()?
+        .OpenReadAsync()
+        .ok()?
+        .get()
+        .ok()?;
+    let size = stream.Size().ok()?;
+    if size == 0 || size > crate::artwork::MAX_BYTES as u64 {
+        return None;
+    }
+    let reader = DataReader::CreateDataReader(&stream.GetInputStreamAt(0).ok()?).ok()?;
+    let count = reader.LoadAsync(size as u32).ok()?.get().ok()?;
+    let mut bytes = vec![0; count as usize];
+    reader.ReadBytes(&mut bytes).ok()?;
+    crate::artwork::data_uri(&bytes)
 }

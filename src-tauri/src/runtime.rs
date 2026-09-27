@@ -65,6 +65,8 @@ enum Command {
     Permission(String, oneshot::Sender<Result<Permissions>>),
     Media(String, oneshot::Sender<Result<()>>),
     Refresh,
+    ObserveMedia,
+    Transport(TransportRequest, oneshot::Sender<Result<()>>),
     Shutdown(Option<oneshot::Sender<()>>),
 }
 
@@ -173,6 +175,17 @@ impl Service {
             .map_err(|_| err("İşlem kuyruğu dolu"))?;
         rx.await.map_err(|_| err("Medya işlemi kapandı"))?
     }
+    pub fn observe_media(&self) {
+        let _ = self.tx.try_send(Command::ObserveMedia);
+    }
+    pub async fn transport(&self, request: TransportRequest) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.cancel.fetch_add(1, Ordering::Relaxed);
+        self.tx
+            .try_send(Command::Transport(request, tx))
+            .map_err(|_| err("İşlem kuyruğu dolu"))?;
+        rx.await.map_err(|_| err("Medya işlemi kapandı"))?
+    }
     pub fn refresh(&self) {
         let _ = self.tx.try_send(Command::Refresh);
     }
@@ -244,6 +257,8 @@ fn worker(
     let mut next_poll = Instant::now();
     let mut retry_after = Instant::now();
     let mut refresh = false;
+    let mut media_until = Instant::now();
+    let artwork = crate::artwork::ArtworkCache::new();
     let mut effect_error = status.error.clone();
     loop {
         let wait = next_poll.saturating_duration_since(Instant::now());
@@ -315,6 +330,34 @@ fn worker(
                 refresh = true;
                 next_poll = Instant::now();
             }
+            Ok(Command::ObserveMedia) => {
+                let was_idle = media_until <= Instant::now();
+                media_until = Instant::now() + Duration::from_secs(6);
+                if was_idle {
+                    next_poll = Instant::now();
+                }
+            }
+            Ok(Command::Transport(request, reply)) => {
+                let result: Result<()> = (|| {
+                    // Re-read capabilities and identity when dequeuing: the UI may be stale.
+                    let fresh = adapter.players(&settings)?;
+                    let mut player = platform::selected(&fresh, &settings)
+                        .cloned()
+                        .ok_or_else(|| err("Önce açık bir oynatıcı seçin"))?;
+                    player.normalize_timeline();
+                    request.validate(&player)?;
+                    adapter.transport(&player.id, &request.action)?;
+                    // Keep rule/playlist ownership. A skip or seek is not a new rule.
+                    controller.transport_requested();
+                    Ok(())
+                })();
+                if let Err(e) = &result {
+                    status.error = Some(e.to_string());
+                }
+                let _ = reply.send(result);
+                refresh = true;
+                next_poll = Instant::now();
+            }
             Ok(Command::Media(action, reply)) => {
                 let result = match action.as_str() {
                     "resumeAutomation" => {
@@ -358,10 +401,24 @@ fn worker(
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 let generation = cancel.load(Ordering::Relaxed);
                 status.error = effect_error.clone();
-                if settings.enabled || refresh {
+                if settings.enabled || refresh || Instant::now() < media_until {
                     match adapter.players(&settings) {
                         Ok(p) => {
                             players = p;
+                            for player in &mut players {
+                                player.normalize_timeline();
+                            }
+                            let selected =
+                                platform::selected(&players, &settings).map(|p| p.id.clone());
+                            for player in &mut players {
+                                player.artwork = if Some(&player.id) == selected.as_ref()
+                                    && Instant::now() < media_until
+                                {
+                                    artwork.resolve(player.artwork.as_deref())
+                                } else {
+                                    None
+                                };
+                            }
                         }
                         Err(e) => {
                             players.clear();
@@ -532,7 +589,9 @@ fn worker(
                 emit(snapshot);
                 refresh = false;
                 next_poll = Instant::now()
-                    + Duration::from_millis(if settings.enabled {
+                    + Duration::from_millis(if Instant::now() < media_until {
+                        settings.poll_ms.min(1000)
+                    } else if settings.enabled {
                         settings.poll_ms
                     } else {
                         10000
@@ -584,6 +643,21 @@ mod tests {
             assert_eq!(input.player.as_ref().unwrap().id, id);
             input.calls.push("pause".into());
             input.player.as_mut().unwrap().playing = Some(false);
+            Ok(())
+        }
+        fn transport(&mut self, id: &str, action: &TransportAction) -> Result<()> {
+            let mut input = self.0.lock().unwrap();
+            assert_eq!(input.player.as_ref().unwrap().id, id);
+            match action {
+                TransportAction::Seek { position, .. } => {
+                    input.player.as_mut().unwrap().position = Some(*position);
+                    input.calls.push("seek".into());
+                }
+                TransportAction::Next | TransportAction::Previous => {
+                    input.player.as_mut().unwrap().track_id = "track-b".into();
+                    input.calls.push("skip".into());
+                }
+            }
             Ok(())
         }
         fn volume(&mut self, _: &str, _: f64) -> Result<()> {
@@ -684,6 +758,100 @@ mod tests {
         fn drop(&mut self) {
             self.service.shutdown();
         }
+    }
+
+    #[tokio::test]
+    async fn transport_preserves_playlist_ownership_and_rejects_old_track_seek() {
+        let mut settings = Settings {
+            provider: Provider::System,
+            target_player: "com.spotify.client".into(),
+            ..Settings::default()
+        };
+        settings.rules.truncate(1);
+        settings.rules[0].action = Action::Play {
+            playlist: Some("spotify:playlist:1234567890123456789012".into()),
+        };
+        let harness = Harness::new(settings);
+        harness.wait(|_| harness.input.lock().unwrap().calls.len() == 1);
+        {
+            let mut input = harness.input.lock().unwrap();
+            let player = input.player.as_mut().unwrap();
+            player.track_id = "track-a".into();
+            player.duration = Some(180.0);
+            player.position = Some(5.0);
+            player.can_seek = true;
+            player.can_next = true;
+        }
+        let request = |action| TransportRequest {
+            player_id: "com.spotify.client".into(),
+            action,
+        };
+        harness
+            .service
+            .transport(request(TransportAction::Seek {
+                position: 60.0,
+                track_id: "track-a".into(),
+            }))
+            .await
+            .unwrap();
+        harness.wait(|s| {
+            s.status
+                .player
+                .as_ref()
+                .is_some_and(|p| p.position == Some(60.0))
+        });
+        harness
+            .service
+            .transport(request(TransportAction::Next))
+            .await
+            .unwrap();
+        harness.wait(|s| {
+            s.status
+                .player
+                .as_ref()
+                .is_some_and(|p| p.track_id == "track-b")
+        });
+        assert!(harness
+            .service
+            .transport(request(TransportAction::Seek {
+                position: 20.0,
+                track_id: "track-a".into()
+            }))
+            .await
+            .is_err());
+        harness.service.observe_media();
+        harness.wait(|_| true);
+        let calls = harness.input.lock().unwrap().calls.clone();
+        assert_eq!(calls.iter().filter(|s| s.starts_with("play:")).count(), 1);
+        assert_eq!(&calls[1..], ["seek", "skip"]);
+        harness.service.media("pause".into()).await.unwrap();
+        harness.wait(|s| s.status.manual_override);
+        harness
+            .service
+            .transport(request(TransportAction::Seek {
+                position: 30.0,
+                track_id: "track-b".into(),
+            }))
+            .await
+            .unwrap();
+        harness.wait(|s| {
+            s.status
+                .player
+                .as_ref()
+                .is_some_and(|p| p.position == Some(30.0))
+        });
+        assert_eq!(
+            harness
+                .input
+                .lock()
+                .unwrap()
+                .player
+                .as_ref()
+                .unwrap()
+                .playing,
+            Some(false)
+        );
+        harness.service.stop().await;
     }
 
     #[tokio::test]

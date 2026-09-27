@@ -1,3 +1,4 @@
+let richMediaSupported = false;
 import { youtubeMusicUrl } from "./media-target.js";
 const api = globalThis.chrome;
 let busy = false;
@@ -156,6 +157,7 @@ async function report() {
         musicTransition: musicState.canTransition === true,
         musicVolume: musicState.volume ?? null,
         musicTitle: musicState.title || "",
+        ...(richMediaSupported ? { music: musicState.media || null } : {}),
         acknowledged,
         commandError,
       }),
@@ -166,6 +168,7 @@ async function report() {
           ? "Eşleştirme anahtarını ve masaüstü köprüsünü kontrol edin."
           : `HTTP ${response.status}`,
       );
+    richMediaSupported = response.headers.get("x-deskody-media-version") === "1";
     const command = await response.json();
     if (executing && command?.id !== executing.id) {
       if (!executing.cancelling) {

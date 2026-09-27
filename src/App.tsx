@@ -1,3 +1,4 @@
+import MediaControls from "./MediaControls";
 import { t, useLanguage, setLanguage, activityMessage } from "./i18n";
 import { version as appVersion } from "../package.json";
 import { ApplicationPicker } from "./ApplicationPicker";
@@ -563,53 +564,9 @@ export default function App() {
                     <h2>{t("Şimdi çalan")}</h2>
                     <Radio size={16} />
                   </div>
-                  <div className="album-art">
-                    <div className="album-horizon" />
-                    <Music2 size={35} />
-                    <span>
-                      FIND YOUR
-                      <br />
-                      <b>FREQUENCY.</b>
-                    </span>
-                  </div>
-                  <div className="track-info">
-                    <h3>
-                      {status.player?.track || t("Sıradaki ritim, senin.")}
-                    </h3>
-                    <p>
-                      {status.player?.artist ||
-                        t("Oynatıcını aç ve akışa katıl.")}
-                    </p>
-                  </div>
-                  <div className="player-footer">
-                    <span className="player-label">
-                      <span className={status.player ? "dot" : "dot neutral"} />
-                      {status.player?.name ||
-                        (draft.provider === "spotify"
-                          ? "Spotify"
-                          : t("Oynatıcı seçilmedi"))}
-                    </span>
-                    <button
-                      className="play-button"
-                      aria-label={
-                        status.player?.playing
-                          ? t("Müziği duraklat")
-                          : t("Müziği çal")
-                      }
-                      disabled={busy || !desktop || !status.player}
-                      onClick={() =>
-                        void execute(() =>
-                          api.media(status.player?.playing ? "pause" : "play"),
-                        )
-                      }
-                    >
-                      {status.player?.playing ? (
-                        <Pause size={17} fill="currentColor" />
-                      ) : (
-                        <Play size={17} fill="currentColor" />
-                      )}
-                    </button>
-                  </div>
+                  <MediaControls player={status.player} disabled={busy || !desktop}
+                    onMedia={action => void execute(() => api.media(action))}
+                    onTransport={request => void execute(() => api.transport(request))} />
                 </section>
                 <section className="panel rules-preview">
                   <div className="section-title">

@@ -184,6 +184,7 @@ pub struct Permissions {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+#[serde(default)]
 pub struct Player {
     pub id: String,
     pub name: String,
@@ -194,6 +195,14 @@ pub struct Player {
     pub can_play: bool,
     pub can_pause: bool,
     pub can_open_uri: bool,
+    pub track_id: String,
+    pub artwork: Option<String>,
+    pub duration: Option<f64>,
+    pub position: Option<f64>,
+    pub sampled_at: Option<f64>,
+    pub can_seek: bool,
+    pub can_next: bool,
+    pub can_previous: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -229,4 +238,125 @@ pub struct Status {
     pub manual_override: bool,
     pub bridge_connected: bool,
     pub activity: Vec<Activity>,
+}
+
+/// Seconds at every IPC/adapter boundary (native ticks are converted in adapters).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum TransportAction {
+    Next,
+    Previous,
+    Seek {
+        position: f64,
+        #[serde(rename = "trackId")]
+        track_id: String,
+    },
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TransportRequest {
+    pub player_id: String,
+    pub action: TransportAction,
+}
+pub fn timestamp() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64()
+}
+impl Player {
+    pub fn normalize_timeline(&mut self) {
+        self.duration = self
+            .duration
+            .filter(|v| v.is_finite() && *v > 0.0 && *v <= 604800.0);
+        self.position = self
+            .position
+            .filter(|v| v.is_finite() && *v >= 0.0)
+            .map(|v| v.min(self.duration.unwrap_or(v)));
+        self.sampled_at = self
+            .sampled_at
+            .filter(|v| v.is_finite() && *v > 0.0 && *v <= timestamp() + 5.0)
+            .or(Some(timestamp()));
+        self.can_seek &=
+            self.duration.is_some() && self.position.is_some() && !self.track_id.is_empty();
+    }
+}
+impl TransportRequest {
+    pub fn validate(&self, player: &Player) -> Result<()> {
+        if self.player_id != player.id {
+            return Err(err("Seçili oynatıcı değişti; tekrar deneyin"));
+        }
+        match &self.action {
+            TransportAction::Next if player.can_next => Ok(()),
+            TransportAction::Previous if player.can_previous => Ok(()),
+            TransportAction::Seek { position, track_id } => {
+                if !position.is_finite() || *position < 0.0 {
+                    return Err(err("Geçersiz oynatma konumu"));
+                }
+                if track_id.is_empty() || *track_id != player.track_id {
+                    return Err(err("Parça değişti; tekrar deneyin"));
+                }
+                if !player.can_seek
+                    || !player
+                        .duration
+                        .is_some_and(|d| d.is_finite() && *position < d)
+                {
+                    return Err(err("Bu parçada konum değiştirme desteklenmiyor"));
+                }
+                Ok(())
+            }
+            _ => Err(err("Oynatıcı bu medya kontrolünü desteklemiyor")),
+        }
+    }
+}
+
+#[cfg(test)]
+mod transport_tests {
+    use super::*;
+    #[test]
+    fn rejects_stale_and_unsupported_transport_commands() {
+        let mut player = Player {
+            id: "spotify".into(),
+            track_id: "track-a".into(),
+            duration: Some(180.0),
+            position: Some(30.0),
+            can_seek: true,
+            can_next: true,
+            ..Player::default()
+        };
+        player.normalize_timeline();
+        let request = |position, track: &str| TransportRequest {
+            player_id: "spotify".into(),
+            action: TransportAction::Seek {
+                position,
+                track_id: track.into(),
+            },
+        };
+        assert!(request(60.0, "track-a").validate(&player).is_ok());
+        for value in [f64::NAN, f64::INFINITY, -1.0, 180.0, 181.0] {
+            assert!(request(value, "track-a").validate(&player).is_err());
+        }
+        assert!(request(60.0, "track-b").validate(&player).is_err());
+        assert!(TransportRequest {
+            player_id: "other".into(),
+            action: TransportAction::Next
+        }
+        .validate(&player)
+        .is_err());
+        assert!(TransportRequest {
+            player_id: "spotify".into(),
+            action: TransportAction::Previous
+        }
+        .validate(&player)
+        .is_err());
+        player.duration = None;
+        player.normalize_timeline();
+        assert!(!player.can_seek);
+    }
+    #[test]
+    fn legacy_players_do_not_advertise_new_controls() {
+        let p: Player = serde_json::from_str(r#"{"id":"legacy","name":"Player"}"#).unwrap();
+        assert!(!p.can_seek && !p.can_next && !p.can_previous);
+        assert!(p.duration.is_none());
+    }
 }

@@ -33,6 +33,8 @@ If documentation conflicts with code, investigate and correct it rather than cop
 | Main interface | [src/App.tsx](src/App.tsx): overview, rule editor, settings, activity |
 | Application picker | [src/ApplicationPicker.tsx](src/ApplicationPicker.tsx); native discovery in [src-tauri/src/applications.rs](src-tauri/src/applications.rs) |
 | Windows/Linux quick panel | [src/TrayPanel.tsx](src/TrayPanel.tsx), [src/tray.css](src/tray.css) |
+| Shared media UI | [src/MediaControls.tsx](src/MediaControls.tsx), [src/media.css](src/media.css): cover, timeline, targeted transport in main/tray |
+| Artwork | [src-tauri/src/artwork.rs](src-tauri/src/artwork.rs): bounded CDN allowlist/cache; Windows thumbnails are local data URIs |
 | Main styling/assets | [src/style.css](src/style.css), [assets/icon.svg](assets/icon.svg), `src-tauri/icons/` |
 | Frontend IPC/types | [src/bridge.ts](src/bridge.ts), [src/types.ts](src/types.ts) |
 | Rule forms/import/defaults | [src/settings.ts](src/settings.ts); backend equivalents in model/config below |
@@ -76,13 +78,16 @@ The native macOS menu invokes the same service and receives a private JSON snaps
 
 - Automatic music changes and quick controls must not activate Spotify, YouTube Music or Deskody, or move the user to another Space. Only an explicit open-main action should bring up the main window.
 - macOS quick controls use system appearance, SF Symbols and native switches, including fullscreen Spaces. Changing React tray styles alone does not change this menu. Tauri's `~2.11` constraint relates to its native tray access; review that integration before upgrading.
+- `Player` timeline fields are seconds with Unix `sampledAt`; `TransportRequest` includes player ID and seek track ID. Revalidate against fresh selected-player metadata before execution. Normalize invalid/live duration; respect capability flags. Skip/seek must preserve rule ownership, paused seeking and focus. See [docs/MEDIA-CONTROLS.md](docs/MEDIA-CONTROLS.md).
+- `observe_media`/native `observe` grant a short visible-controls polling lease; do not reset the gate or restart playlists. Artwork network I/O runs off the automation worker and AppKit thread; accept only bounded raster images from allowlisted CDNs, never arbitrary page URLs.
 - Control only the selected player. Never substitute an ambiguous global play/pause toggle for an autonomous pause. Disabling automation leaves current music playing.
 - Other-media/video interruptions and user pause rules precede play rules. Exclude YouTube Music's own playback from self-interruption. Higher priority wins within an action category; rule ID breaks ties.
 - Multiple applications in one rule use OR matching. Switching between those apps or resuming the same playlist after an interruption must not restart unchanged content.
 - Respect manual pause until context changes or the user resumes automation. Restore player volume on transition error/cancellation; never manipulate system master volume as a fade fallback.
-- macOS Spotify content starts through the running Spotify app's bundled `spotify_cli`; pause/resume/volume use JXA. No Premium, extension or Web API is required for this local route. Do not reintroduce AppleScript `play track`, URL-opening or focus-stealing fallback behavior. See [docs/SPOTIFY.md](docs/SPOTIFY.md).
+- macOS Spotify content starts through the running Spotify app's bundled `spotify_cli`; metadata, pause/resume/volume and previous/next/seek use JXA. No Premium, extension or Web API is required for this local route. Do not reintroduce AppleScript `play track`, URL-opening or focus-stealing fallback behavior. See [docs/SPOTIFY.md](docs/SPOTIFY.md).
 - Windows GSMTC controls the existing Spotify session but cannot select tracks/playlists: that feature currently requires Web API. Linux depends on MPRIS capabilities. Do not claim macOS parity without implementation and platform evidence.
 - YouTube Music uses the paired extension and in-page SPA navigation. Do not restore `tabs.update({url})`, full-page navigation or window/tab activation: they caused the leave-app prompt and focus loss.
+- Rich extension metadata is negotiated with the `x-deskody-media-version` response header; old app/extension combinations must keep legacy play/pause working.
 - YTM success requires actual playback progress, not just a matching URL or `play()` call. Preserve bounded acknowledgement, cancellation and volume/mute recovery. Do not automatically pause already-playing music merely because an acknowledgement timed out.
 - Unsupported OS/permission/player capabilities must remain explicit. Generic GNOME/KDE Wayland app detection is not implemented; Sway/Hyprland and X11 have adapters.
 
@@ -120,6 +125,7 @@ Use `CARGO_NET_OFFLINE=true` only when dependencies are already cached. If brows
 | Localization/persistence | `src/i18n.test.ts`, `tests/language.spec.ts`; Rust config/runtime tests |
 | Quick controls/IPC | `tests/tray.spec.ts`; Rust runtime tests; on macOS `python3 scripts/test-native-menu.py` |
 | Rules/fades/URL validation | `npm run test:rust`; shared corpora in `tests/fixtures/`; frontend validation tests |
+| Media controls | `src/MediaControls.test.ts`, `tests/tray.spec.ts`, `tests/extension.spec.ts`; Rust transport/artwork tests; native menu tests |
 | Browser extension/YTM | `npm run extension:build`; `tests/extension.spec.ts`; real account/PWA acceptance when applicable |
 | macOS Spotify | Rust Spotify tests; `python3 scripts/test-native-spotify.py` |
 | OS adapters/build config | Full desktop Clippy/build for affected OS; cross-checks are useful but do not prove runtime behavior |

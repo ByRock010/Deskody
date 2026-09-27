@@ -33,6 +33,11 @@
       return undefined;
     }
   }
+  function transportButton(action) {
+    const selector = action === "next" ? ".next-button" : ".previous-button";
+    const button = document.querySelector(`ytmusic-player-bar ${selector}`);
+    return button && !button.disabled && !button.hasAttribute("disabled") && button.getAttribute("aria-disabled") !== "true" ? button : null;
+  }
   function snapshot() {
     const element = media();
     if (element && !identities.has(element))
@@ -41,8 +46,22 @@
       read("getVideoData")?.video_id ||
       read("getPlayerResponse")?.videoDetails?.videoId;
     const volume = read("getVolume");
+    const metadata = navigator.mediaSession?.metadata;
+    const data = read("getVideoData");
+    const response = read("getPlayerResponse");
+    const ad = player()?.classList.contains("ad-showing") || false;
+    const duration = Number.isFinite(element?.duration) && element.duration > 0 ? element.duration : null;
+    const images = metadata?.artwork || response?.videoDetails?.thumbnail?.thumbnails || [];
+    const artwork = images.find(i => /(?:256|300|512)/.test(i.sizes || "")) || images.at(-1);
+    const canSeek = !ad && !!duration && !!videoId && !!element?.seekable?.length;
     return {
       videoId: typeof videoId === "string" ? videoId : null,
+      track: String(metadata?.title || data?.title || "").slice(0, 1000),
+      artist: String(metadata?.artist || data?.author || "").slice(0, 1000),
+      artwork: artwork?.src || artwork?.url || null,
+      duration, sampledAt: Date.now()/1000, canSeek,
+      canNext: !ad && !!transportButton("next"),
+      canPrevious: !ad && !!transportButton("previous"),
       mediaKey: element ? identities.get(element) : null,
       loadEpoch,
       playing: element ? !element.paused && !element.ended : null,
@@ -59,7 +78,22 @@
     const element = media();
     const native = player();
     if (!element) throw new Error("YouTube Music oynatıcısı hazır değil");
-    if (request.action === "volume" || request.action === "restore") {
+    if (request.action === "next" || request.action === "previous") {
+      const button = transportButton(request.action);
+      if (!button || player()?.classList.contains("ad-showing")) throw new Error("Oynatıcı bu medya kontrolünü desteklemiyor");
+      button.click(); // In-page transport button; does not focus or navigate the browser window.
+    } else if (request.action === "seek") {
+      const state = snapshot();
+      if (state.videoId !== request.trackId) throw new Error("Parça değişti; tekrar deneyin");
+      if (!state.canSeek || !Number.isFinite(request.position) || request.position < 0 || request.position >= state.duration)
+        throw new Error("Bu parçada konum değiştirme desteklenmiyor");
+      let seekable = false;
+      for (let i=0; i<element.seekable.length; i++)
+        if (request.position >= element.seekable.start(i) && request.position <= element.seekable.end(i)) seekable = true;
+      if (!seekable) throw new Error("Bu parçada konum değiştirme desteklenmiyor");
+      // currentTime preserves paused/mute/volume state; do not call playVideo here.
+      element.currentTime = request.position;
+    } else if (request.action === "volume" || request.action === "restore") {
       if (Number.isFinite(request.volume)) {
         const volume = Math.max(0, Math.min(1, request.volume));
         native?.setVolume?.(volume * 100);
@@ -103,7 +137,7 @@
         reply({ ...snapshot(), playbackError });
         return;
       }
-      if (["play", "pause", "volume", "restore"].includes(request.action)) {
+      if (["play", "pause", "volume", "restore", "next", "previous", "seek"].includes(request.action)) {
         if (request.action === "play") playbackError = null;
         control(request);
         reply({ ok: true, ...snapshot() });

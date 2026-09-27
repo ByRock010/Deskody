@@ -36,6 +36,8 @@ pub struct BrowserContext {
     pub music_transition: bool,
     pub music_volume: Option<f64>,
     pub music_title: String,
+    #[serde(default)]
+    pub music: Option<Player>,
     pub acknowledged: Option<String>,
     pub command_error: Option<String>,
 }
@@ -52,6 +54,10 @@ pub struct BrowserCommand {
     pub fade_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pause: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_id: Option<String>,
 }
 
 #[derive(Default)]
@@ -154,10 +160,14 @@ async fn context(
     Json(mut context): Json<BrowserContext>,
 ) -> impl IntoResponse {
     let Ok(mut bridge) = bridge.lock() else {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(None));
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(None::<BrowserCommand>),
+        )
+            .into_response();
     };
     if !bridge.enabled || !authorized(&headers, &bridge.token) {
-        return (StatusCode::UNAUTHORIZED, Json(None));
+        return (StatusCode::UNAUTHORIZED, Json(None::<BrowserCommand>)).into_response();
     }
     if context.title.len() > 2048
         || context.music_title.len() > 2048
@@ -170,17 +180,17 @@ async fn context(
             .music_volume
             .is_some_and(|v| !v.is_finite() || !(0.0..=1.0).contains(&v))
     {
-        return (StatusCode::BAD_REQUEST, Json(None));
+        return (StatusCode::BAD_REQUEST, Json(None::<BrowserCommand>)).into_response();
     }
     if let Some(raw) = &context.url {
         if raw.len() > 8192 {
-            return (StatusCode::BAD_REQUEST, Json(None));
+            return (StatusCode::BAD_REQUEST, Json(None::<BrowserCommand>)).into_response();
         }
         let Ok(mut parsed) = url::Url::parse(raw) else {
-            return (StatusCode::BAD_REQUEST, Json(None));
+            return (StatusCode::BAD_REQUEST, Json(None::<BrowserCommand>)).into_response();
         };
         if !matches!(parsed.scheme(), "http" | "https" | "file") {
-            return (StatusCode::BAD_REQUEST, Json(None));
+            return (StatusCode::BAD_REQUEST, Json(None::<BrowserCommand>)).into_response();
         }
         // Queries, fragments and credentials are unnecessary for matching and never retained.
         parsed.set_query(None);
@@ -189,7 +199,26 @@ async fn context(
         let _ = parsed.set_password(None);
         context.url = Some(parsed.to_string());
     }
-    (StatusCode::OK, Json(bridge.accept(context)))
+    if let Some(music) = &mut context.music {
+        if music.track.len() > 2048
+            || music.artist.len() > 2048
+            || music.track_id.len() > 256
+            || music.artwork.as_ref().is_some_and(|v| v.len() > 2048)
+        {
+            return (StatusCode::BAD_REQUEST, Json(None::<BrowserCommand>)).into_response();
+        }
+        music.normalize_timeline();
+        music.artwork = music
+            .artwork
+            .take()
+            .filter(|v| crate::artwork::allowed_url(v));
+    }
+    (
+        StatusCode::OK,
+        [("x-deskody-media-version", "1")],
+        Json(bridge.accept(context)),
+    )
+        .into_response()
 }
 
 pub async fn serve(bridge: SharedBridge) {
@@ -228,6 +257,8 @@ pub fn command(
         url: url.map(crate::config::youtube_music_uri).transpose()?,
         fade_ms: None,
         pause: None,
+        position: None,
+        track_id: None,
     };
     send_command(bridge, command, cancel)
 }
@@ -350,11 +381,32 @@ impl crate::platform::Platform for WithBrowser {
                     name: "YouTube Music · eklenti".into(),
                     playing: s.music_playing,
                     volume: s.music_volume,
-                    track: s.music_title,
+                    track: s
+                        .music
+                        .as_ref()
+                        .map(|m| m.track.clone())
+                        .filter(|v| !v.is_empty())
+                        .unwrap_or(s.music_title),
+                    artist: s
+                        .music
+                        .as_ref()
+                        .map(|m| m.artist.clone())
+                        .unwrap_or_default(),
+                    track_id: s
+                        .music
+                        .as_ref()
+                        .map(|m| m.track_id.clone())
+                        .unwrap_or_default(),
+                    artwork: s.music.as_ref().and_then(|m| m.artwork.clone()),
+                    duration: s.music.as_ref().and_then(|m| m.duration),
+                    position: s.music.as_ref().and_then(|m| m.position),
+                    sampled_at: s.music.as_ref().and_then(|m| m.sampled_at),
+                    can_seek: s.music.as_ref().is_some_and(|m| m.can_seek),
+                    can_next: s.music.as_ref().is_some_and(|m| m.can_next),
+                    can_previous: s.music.as_ref().is_some_and(|m| m.can_previous),
                     can_play: true,
                     can_pause: true,
                     can_open_uri: s.music_can_open,
-                    ..Player::default()
                 });
             }
         }
@@ -416,10 +468,38 @@ impl crate::platform::Platform for WithBrowser {
                     url: uri.map(crate::config::youtube_music_uri).transpose()?,
                     fade_ms: Some(fade_ms),
                     pause: Some(pause),
+                    position: None,
+                    track_id: None,
                 },
                 &self.cancel,
             )
         })())
+    }
+    fn transport(&mut self, player: &str, action: &TransportAction) -> Result<()> {
+        if player != "browser:music.youtube.com" {
+            return self.native.transport(player, action);
+        }
+        let (kind, position, track_id) = match action {
+            TransportAction::Next => ("next", None, None),
+            TransportAction::Previous => ("previous", None, None),
+            TransportAction::Seek { position, track_id } => {
+                ("seek", Some(*position), Some(track_id.clone()))
+            }
+        };
+        send_command(
+            &self.bridge,
+            BrowserCommand {
+                id: uuid::Uuid::new_v4().to_string(),
+                action: kind.into(),
+                position,
+                track_id,
+                url: None,
+                volume: None,
+                fade_ms: None,
+                pause: None,
+            },
+            &self.cancel,
+        )
     }
     fn media_key(&mut self) -> Result<()> {
         self.native.media_key()
@@ -438,6 +518,8 @@ mod tests {
             url: Some("https://music.youtube.com/watch?v=LkoXilp7FPY".into()),
             fade_ms: Some(600),
             pause: Some(false),
+            position: None,
+            track_id: None,
         })
         .unwrap();
         assert_eq!(payload["fadeMs"], 600);
@@ -536,12 +618,25 @@ mod tests {
         headers.insert("authorization", "Bearer secret".parse().unwrap());
         let sample = BrowserContext {
             url: Some("https://user:pass@example.com/notes.pdf?private=yes#page=2".into()),
+            music: Some(Player {
+                track_id: "track-a".into(),
+                duration: Some(120.0),
+                position: Some(30.0),
+                can_seek: true,
+                artwork: Some("http://127.0.0.1/private".into()),
+                ..Player::default()
+            }),
             ..BrowserContext::default()
         };
         let response = context(State(bridge.clone()), headers, Json(sample))
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["x-deskody-media-version"], "1");
+        let media = bridge.lock().unwrap().sample().unwrap().music.unwrap();
+        assert!(media.artwork.is_none());
+        assert!(media.can_seek);
+        assert_eq!(media.position, Some(30.0));
         assert_eq!(
             bridge.lock().unwrap().sample().unwrap().url.as_deref(),
             Some("https://example.com/notes.pdf")

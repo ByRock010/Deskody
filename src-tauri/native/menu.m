@@ -42,6 +42,24 @@ void deskody_menu_result(const char *error) {
 @implementation DeskodyMenuSwitch
 @end
 
+@interface DeskodySeekSlider : NSSlider
+@property BOOL dragging;
+@property(copy) NSString *playerID;
+@property(copy) NSString *trackID;
+@end
+@implementation DeskodySeekSlider
+- (void)mouseDown:(NSEvent *)event {
+    self.dragging = YES;
+    [super mouseDown:event];
+    self.dragging = NO;
+}
+@end
+static NSString *mediaTime(id value) {
+    if (![value isKindOfClass:NSNumber.class] || !isfinite([value doubleValue]) || [value doubleValue] < 0) return @"—:—";
+    NSInteger seconds = (NSInteger)[value doubleValue];
+    if (seconds >= 3600) return [NSString stringWithFormat:@"%ld:%02ld:%02ld", (long)(seconds/3600), (long)((seconds/60)%60), (long)(seconds%60)];
+    return [NSString stringWithFormat:@"%ld:%02ld", (long)(seconds/60), (long)(seconds%60)];
+}
 static NSString *textValue(id value) { return [value isKindOfClass:NSString.class] ? value : @""; }
 static NSString *L(NSDictionary *snapshot, NSString *key) {
     if ([snapshot[@"settings"][@"language"] isEqual:@"tr"]) return key;
@@ -95,6 +113,15 @@ static NSString *matcherName(NSDictionary *matcher) {
 @property(strong) NSTextField *track;
 @property(strong) NSTextField *artist;
 @property(strong) NSButton *play;
+@property(strong) NSButton *next;
+@property(strong) NSButton *previous;
+@property(strong) NSImageView *cover;
+@property(copy) NSString *artworkSource;
+@property(strong) DeskodySeekSlider *seek;
+@property(strong) NSTextField *elapsed;
+@property(strong) NSTextField *duration;
+@property(strong) NSTextField *source;
+@property NSTimeInterval lastObserve;
 @property(strong) NSButton *resume;
 @property(strong) NSTextField *ruleCount;
 @property(strong) NSTextField *rulesHeading;
@@ -121,6 +148,7 @@ static NSString *matcherName(NSDictionary *matcher) {
     self.busy = YES;
     self.localError = nil;
     self.flow.enabled = NO; self.play.enabled = NO; self.resume.enabled = NO;
+    self.previous.enabled = NO; self.next.enabled = NO; self.seek.enabled = NO;
     for (NSSwitch *control in self.ruleSwitches.allValues) control.enabled = NO;
     self.callback(action.UTF8String, rule.UTF8String ?: "", enabled);
 }
@@ -131,6 +159,22 @@ static NSString *matcherName(NSDictionary *matcher) {
     BOOL playing = [player isKindOfClass:NSDictionary.class] && [player[@"playing"] isEqual:@YES];
     [self send:playing ? @"pause" : @"play" rule:nil enabled:NO];
 }
+- (void)transport:(NSString *)kind slider:(DeskodySeekSlider *)slider {
+    NSDictionary *player = self.snapshot[@"status"][@"player"];
+    if (![player isKindOfClass:NSDictionary.class]) return;
+    NSMutableDictionary *action = [@{@"kind":kind} mutableCopy];
+    NSString *pid = textValue(player[@"id"]);
+    if (slider) {
+        action[@"position"] = @(slider.doubleValue);
+        action[@"trackId"] = slider.trackID ?: @"";
+        pid = slider.playerID ?: @"";
+    }
+    NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"playerId":pid, @"action":action} options:0 error:nil];
+    if (data) [self send:@"transport" rule:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] enabled:NO];
+}
+- (void)nextPressed:(NSButton *)button { [self transport:@"next" slider:nil]; }
+- (void)previousPressed:(NSButton *)button { [self transport:@"previous" slider:nil]; }
+- (void)seekChanged:(DeskodySeekSlider *)slider { [self transport:@"seek" slider:slider]; }
 - (void)resumePressed:(NSButton *)button { [self send:@"resumeAutomation" rule:nil enabled:NO]; }
 - (void)build {
     NSDictionary *settings = self.snapshot[@"settings"] ?: @{};
@@ -153,16 +197,40 @@ static NSString *matcherName(NSDictionary *matcher) {
     [self.content addSubview:self.flow];
     NSBox *divider = [[NSBox alloc] initWithFrame:NSMakeRect(14, 87, 298, 1)];
     divider.boxType = NSBoxSeparator; [self.content addSubview:divider];
-    icon(self.content, @"music.note", NSMakeRect(17, 105, 25, 27));
-    self.track = label(self.content, @"", NSMakeRect(53, 96, 210, 23), YES);
-    self.artist = label(self.content, @"", NSMakeRect(53, 119, 208, 17), NO);
+    self.cover = icon(self.content, @"music.note", NSMakeRect(14, 100, 52, 52));
+    self.cover.wantsLayer = YES; self.cover.layer.cornerRadius = 7; self.cover.layer.masksToBounds = YES;
+    self.cover.imageScaling = NSImageScaleProportionallyUpOrDown;
+    self.artworkSource = nil;
+    self.track = label(self.content, @"", NSMakeRect(77, 96, 235, 23), YES);
+    self.artist = label(self.content, @"", NSMakeRect(77, 120, 235, 17), NO);
+    self.source = label(self.content, @"", NSMakeRect(77, 138, 235, 15), NO);
+    self.source.font = [NSFont systemFontOfSize:10];
+    self.seek = [[DeskodySeekSlider alloc] initWithFrame:NSMakeRect(14, 160, 298, 18)];
+    self.seek.minValue = 0; self.seek.maxValue = 1;
+    self.seek.continuous = NO;
+    self.seek.target = self; self.seek.action = @selector(seekChanged:);
+    [self.seek setAccessibilityLabel:L(self.snapshot, @"Oynatma konumu")];
+    [self.content addSubview:self.seek];
+    self.elapsed = label(self.content, @"—:—", NSMakeRect(14, 180, 95, 15), NO);
+    self.duration = label(self.content, @"—:—", NSMakeRect(220, 180, 92, 15), NO);
+    self.duration.alignment = NSTextAlignmentRight;
+    self.elapsed.font = self.duration.font = [NSFont monospacedDigitSystemFontOfSize:10 weight:NSFontWeightRegular];
     self.play = [NSButton buttonWithImage:symbol(@"play.fill") target:self action:@selector(playPressed:)];
-    self.play.frame = NSMakeRect(273, 102, 34, 30);
-    self.play.bezelStyle = NSBezelStyleCircular;
-    self.play.bordered = NO;
-    [self.content addSubview:self.play];
+    self.previous = [NSButton buttonWithImage:symbol(@"backward.end.fill") target:self action:@selector(previousPressed:)];
+    self.next = [NSButton buttonWithImage:symbol(@"forward.end.fill") target:self action:@selector(nextPressed:)];
+    NSArray *buttons = @[self.previous, self.play, self.next];
+    for (NSUInteger i=0; i<buttons.count; i++) {
+        NSButton *button = buttons[i];
+        button.frame = NSMakeRect(96 + i*50, 199, 34, 30);
+        button.bezelStyle = NSBezelStyleCircular; button.bordered = NO;
+        [self.content addSubview:button];
+    }
+    [self.previous setAccessibilityLabel:L(self.snapshot, @"Önceki parça")];
+    [self.next setAccessibilityLabel:L(self.snapshot, @"Sonraki parça")];
+    self.previous.toolTip = self.previous.accessibilityLabel;
+    self.next.toolTip = self.next.accessibilityLabel;
     self.resume = [NSButton buttonWithTitle:L(self.snapshot, @"Otomasyona dön") target:self action:@selector(resumePressed:)];
-    self.resume.frame = NSMakeRect(48, 140, 210, 24);
+    self.resume.frame = NSMakeRect(48, 233, 210, 24);
     self.resume.bordered = NO;
     self.resume.image = symbol(@"arrow.counterclockwise");
     self.resume.imagePosition = NSImageLeading;
@@ -233,9 +301,44 @@ static NSString *matcherName(NSDictionary *matcher) {
     [self.play setAccessibilityLabel:playing ? L(self.snapshot, @"Müziği duraklat") : L(self.snapshot, @"Müziği çal")];
     self.play.toolTip = self.play.accessibilityLabel;
     self.play.enabled = !self.busy && [player[playing ? @"canPause" : @"canPlay"] boolValue];
+    self.source.stringValue = L(self.snapshot, textValue(player[@"name"]));
+    self.previous.enabled = !self.busy && [player[@"canPrevious"] boolValue];
+    self.next.enabled = !self.busy && [player[@"canNext"] boolValue];
+    id rawDuration = player[@"duration"], rawPosition = player[@"position"];
+    BOOL timeline = [rawDuration isKindOfClass:NSNumber.class] && [rawPosition isKindOfClass:NSNumber.class] && [rawDuration doubleValue] > 0;
+    if (!self.seek.dragging) {
+        double position = timeline ? [rawPosition doubleValue] : 0;
+        if (timeline && playing && [player[@"sampledAt"] isKindOfClass:NSNumber.class]) position += MAX(0, MIN(15, NSDate.date.timeIntervalSince1970 - [player[@"sampledAt"] doubleValue]));
+        self.seek.maxValue = timeline ? MAX(0, [rawDuration doubleValue] - 0.05) : 1;
+        self.seek.doubleValue = MAX(0, MIN(self.seek.maxValue, position));
+        self.seek.playerID = textValue(player[@"id"]);
+        self.seek.trackID = textValue(player[@"trackId"]);
+        self.seek.enabled = !self.busy && timeline && [player[@"canSeek"] boolValue];
+    }
+    self.elapsed.stringValue = timeline ? mediaTime(@(self.seek.doubleValue)) : @"—:—";
+    self.duration.stringValue = mediaTime(rawDuration);
+    self.seek.toolTip = self.seek.enabled ? L(self.snapshot, @"Oynatma konumu") : L(self.snapshot, @"Bu parçada konum değiştirme desteklenmiyor");
+    [self.seek setAccessibilityValueDescription:[NSString stringWithFormat:@"%@ / %@", self.elapsed.stringValue, self.duration.stringValue]];
+    NSString *artwork = textValue(player[@"artwork"]);
+    if (!self.artworkSource || ![artwork isEqual:self.artworkSource]) {
+        self.artworkSource = artwork;
+        NSImage *image = nil;
+        if (artwork.length < 1500000 && ([artwork hasPrefix:@"data:image/png;base64,"] || [artwork hasPrefix:@"data:image/jpeg;base64,"] || [artwork hasPrefix:@"data:image/webp;base64,"])) {
+            NSString *base64 = [[artwork componentsSeparatedByString:@","] lastObject];
+            NSData *data = [[NSData alloc] initWithBase64EncodedString:base64 options:0];
+            if (data) image = [[NSImage alloc] initWithData:data];
+        }
+        self.cover.image = image ?: symbol(@"music.note");
+        self.cover.contentTintColor = image ? nil : NSColor.secondaryLabelColor;
+        [self.cover setAccessibilityLabel:L(self.snapshot, @"Albüm kapağı")];
+    }
+    if (self.tracking && NSDate.timeIntervalSinceReferenceDate - self.lastObserve > 2.5) {
+        self.lastObserve = NSDate.timeIntervalSinceReferenceDate;
+        self.callback("observe", "", false);
+    }
     self.resume.hidden = ![status[@"manualOverride"] boolValue];
     self.resume.enabled = !self.busy && enabled;
-    CGFloat rulesY = self.resume.hidden ? 148 : 174;
+    CGFloat rulesY = self.resume.hidden ? 237 : 263;
     [self.rulesHeading setFrameOrigin:NSMakePoint(14, rulesY)];
     [self.ruleCount setFrameOrigin:NSMakePoint(206, rulesY + 3)];
     [self.ruleScroll setFrameOrigin:NSMakePoint(0, rulesY + 28)];
@@ -272,7 +375,8 @@ static NSString *matcherName(NSDictionary *matcher) {
     self.timer = [NSTimer timerWithTimeInterval:0.12 repeats:YES block:^(NSTimer *timer) { (void)timer; [weakSelf sync]; }];
     // Menu tracking is a nested run loop. No dependency on Tao's normal-mode events.
     [NSRunLoop.mainRunLoop addTimer:self.timer forMode:NSEventTrackingRunLoopMode];
-    self.callback("refresh", "", false);
+    self.lastObserve = NSDate.timeIntervalSinceReferenceDate;
+    self.callback("observe", "", false);
 }
 - (void)menuDidClose:(NSMenu *)menu {
     self.tracking = NO;
