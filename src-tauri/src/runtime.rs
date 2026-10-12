@@ -33,6 +33,8 @@ pub enum QuickChange {
     Rule { id: String, enabled: bool },
     ToggleEnabled,
     Language { language: Language },
+    Notch { enabled: bool },
+    NotchNowPlaying { enabled: bool },
 }
 
 enum SettingsUpdate {
@@ -46,6 +48,10 @@ impl SettingsUpdate {
             Self::Replace(settings) => next = settings,
             Self::Quick(QuickChange::Enabled { enabled }) => next.enabled = enabled,
             Self::Quick(QuickChange::Language { language }) => next.language = language,
+            Self::Quick(QuickChange::Notch { enabled }) => next.notch_enabled = enabled,
+            Self::Quick(QuickChange::NotchNowPlaying { enabled }) => {
+                next.notch_now_playing = enabled
+            }
             Self::Quick(QuickChange::ToggleEnabled) => next.enabled = !next.enabled,
             Self::Quick(QuickChange::Rule { id, enabled }) => {
                 next.rules
@@ -66,6 +72,7 @@ enum Command {
     Media(String, oneshot::Sender<Result<()>>),
     Refresh,
     ObserveMedia,
+    ObserveCompact,
     Transport(TransportRequest, oneshot::Sender<Result<()>>),
     Shutdown(Option<oneshot::Sender<()>>),
 }
@@ -151,7 +158,12 @@ impl Service {
     }
     pub async fn quick_change(&self, change: QuickChange) -> Result<Settings> {
         let (tx, rx) = oneshot::channel();
-        if !matches!(change, QuickChange::Language { .. }) {
+        if !matches!(
+            change,
+            QuickChange::Language { .. }
+                | QuickChange::Notch { .. }
+                | QuickChange::NotchNowPlaying { .. }
+        ) {
             self.cancel.fetch_add(1, Ordering::Relaxed);
         }
         self.tx
@@ -174,6 +186,9 @@ impl Service {
             .try_send(Command::Media(action, tx))
             .map_err(|_| err("İşlem kuyruğu dolu"))?;
         rx.await.map_err(|_| err("Medya işlemi kapandı"))?
+    }
+    pub fn observe_compact(&self) {
+        let _ = self.tx.try_send(Command::ObserveCompact);
     }
     pub fn observe_media(&self) {
         let _ = self.tx.try_send(Command::ObserveMedia);
@@ -258,6 +273,7 @@ fn worker(
     let mut retry_after = Instant::now();
     let mut refresh = false;
     let mut media_until = Instant::now();
+    let mut compact_until = Instant::now();
     let artwork = crate::artwork::ArtworkCache::new();
     let mut effect_error = status.error.clone();
     loop {
@@ -273,9 +289,11 @@ fn worker(
             Ok(Command::Save(update, reply)) => {
                 let result = update.apply(&settings).and_then(|next| {
                     store.save(&next)?;
-                    let mut only_language = settings.clone();
-                    only_language.language = next.language;
-                    let language_only = only_language == next;
+                    let mut presentation = settings.clone();
+                    presentation.language = next.language;
+                    presentation.notch_enabled = next.notch_enabled;
+                    presentation.notch_now_playing = next.notch_now_playing;
+                    let presentation_only = presentation == next;
                     let reset = next.provider != settings.provider
                         || next.spotify_web != settings.spotify_web
                         || next.spotify_client_id != settings.spotify_client_id
@@ -285,10 +303,13 @@ fn worker(
                             && engine::evaluate(&next, &status.context)
                                 != engine::evaluate(&settings, &status.context));
                     settings = next;
+                    if !settings.notch_enabled || !settings.notch_now_playing {
+                        compact_until = Instant::now();
+                    }
                     if reset {
                         controller.relinquish();
                     }
-                    if !language_only {
+                    if !presentation_only {
                         gate.reset();
                         retry_after = Instant::now();
                         if let Ok(mut b) = bridge.lock() {
@@ -329,6 +350,16 @@ fn worker(
                 retry_after = Instant::now();
                 refresh = true;
                 next_poll = Instant::now();
+            }
+            Ok(Command::ObserveCompact) => {
+                if !settings.notch_enabled || !settings.notch_now_playing {
+                    continue;
+                }
+                let was_idle = compact_until <= Instant::now();
+                compact_until = Instant::now() + Duration::from_secs(12);
+                if was_idle {
+                    next_poll = Instant::now();
+                }
             }
             Ok(Command::ObserveMedia) => {
                 let was_idle = media_until <= Instant::now();
@@ -401,7 +432,11 @@ fn worker(
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 let generation = cancel.load(Ordering::Relaxed);
                 status.error = effect_error.clone();
-                if settings.enabled || refresh || Instant::now() < media_until {
+                if settings.enabled
+                    || refresh
+                    || Instant::now() < media_until
+                    || Instant::now() < compact_until
+                {
                     match adapter.players(&settings) {
                         Ok(p) => {
                             players = p;
@@ -412,7 +447,8 @@ fn worker(
                                 platform::selected(&players, &settings).map(|p| p.id.clone());
                             for player in &mut players {
                                 player.artwork = if Some(&player.id) == selected.as_ref()
-                                    && Instant::now() < media_until
+                                    && (Instant::now() < media_until
+                                        || Instant::now() < compact_until)
                                 {
                                     artwork.resolve(player.artwork.as_deref())
                                 } else {
@@ -591,6 +627,12 @@ fn worker(
                 next_poll = Instant::now()
                     + Duration::from_millis(if Instant::now() < media_until {
                         settings.poll_ms.min(1000)
+                    } else if Instant::now() < compact_until {
+                        if settings.enabled {
+                            settings.poll_ms.min(3000)
+                        } else {
+                            3000
+                        }
                     } else if settings.enabled {
                         settings.poll_ms
                     } else {
@@ -855,7 +897,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn language_change_persists_without_cancelling_or_restarting_music() {
+    async fn presentation_changes_persist_without_cancelling_or_restarting_music() {
         let mut settings = Settings {
             provider: Provider::System,
             target_player: "com.spotify.client".into(),
@@ -880,6 +922,33 @@ mod tests {
             assert_eq!(Store::new(harness.directory.path()).load().unwrap(), saved);
             harness.service.refresh();
             harness.wait(|s| s.settings.language == language && s.status.active_rule.is_some());
+            assert_eq!(harness.service.cancel.load(Ordering::SeqCst), generation);
+            assert_eq!(harness.input.lock().unwrap().calls.len(), 1);
+        }
+        for enabled in [false, true] {
+            let saved = harness
+                .service
+                .quick_change(QuickChange::Notch { enabled })
+                .await
+                .unwrap();
+            assert_eq!(saved.notch_enabled, enabled);
+            assert_eq!(Store::new(harness.directory.path()).load().unwrap(), saved);
+            harness.service.observe_compact();
+            harness.wait(|s| s.settings.notch_enabled == enabled);
+            assert_eq!(harness.service.cancel.load(Ordering::SeqCst), generation);
+            assert_eq!(harness.input.lock().unwrap().calls.len(), 1);
+        }
+        for enabled in [false, true] {
+            let saved = harness
+                .service
+                .quick_change(QuickChange::NotchNowPlaying { enabled })
+                .await
+                .unwrap();
+            assert_eq!(saved.notch_now_playing, enabled);
+            assert!(saved.notch_enabled);
+            assert_eq!(Store::new(harness.directory.path()).load().unwrap(), saved);
+            harness.service.observe_compact();
+            harness.wait(|s| s.settings.notch_now_playing == enabled);
             assert_eq!(harness.service.cancel.load(Ordering::SeqCst), generation);
             assert_eq!(harness.input.lock().unwrap().calls.len(), 1);
         }

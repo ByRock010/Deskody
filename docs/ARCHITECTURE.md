@@ -1,5 +1,17 @@
 # Mimari kararlar
 
+## macOS notch
+
+Yerel `NSStatusItem → NSMenu` yanında, hover ile açılan bağımsız bir nonactivating
+`NSPanel` bulunur. AppKit ana thread'i ekran geometrisi, mouse hit testing ve Core
+Animation animasyonlarını yönetir; medya ve ayar işlemleri mevcut Rust `Service`
+kuyruğundan geçer. Panel key/main pencere olamaz ve uygulamayı aktive etmez.
+`notchEnabled`, `notchNowPlaying` ve dil değişiklikleri sunum tercihidir: otomasyon gate'i, iptal
+generation'ı ve oynatma sahipliği korunur. Kompakt görünüm yavaş medya gözlem
+lease'i kullanır; genişleyen görünüm mevcut hızlı lease'i yeniler. Windows/Linux
+bu pencereyi oluşturmaz. API araştırması, yaşam döngüsü ve test sınırları:
+[NOTCH.md](NOTCH.md).
+
 ## Uygulanan fazlar
 
 1. Tauri kabuğu, React arayüzü, minimal capabilities/CSP ve tray yaşam döngüsü.

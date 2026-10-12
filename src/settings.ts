@@ -44,6 +44,8 @@ export function defaultSettings(): Settings {
   return {
     version: 1,
     language: "en",
+    notchEnabled: true,
+    notchNowPlaying: true,
     enabled: false,
     provider: "spotify",
     spotifyWeb: false,
@@ -218,6 +220,14 @@ export function mergeQuickChanges(
     language:
       previous.language !== next.language ? next.language : draft.language,
     enabled: previous.enabled !== next.enabled ? next.enabled : draft.enabled,
+    notchEnabled:
+      previous.notchEnabled !== next.notchEnabled
+        ? next.notchEnabled
+        : draft.notchEnabled,
+    notchNowPlaying:
+      previous.notchNowPlaying !== next.notchNowPlaying
+        ? next.notchNowPlaying
+        : draft.notchNowPlaying,
     rules: draft.rules.map((rule) => {
       const before = previous.rules.find((r) => r.id === rule.id);
       const after = next.rules.find((r) => r.id === rule.id);

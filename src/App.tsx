@@ -205,6 +205,22 @@ export default function App() {
       );
     });
   };
+  const changeNotch = async (
+    kind: "notch" | "notchNowPlaying",
+    enabled: boolean,
+  ) => {
+    await execute(async () => {
+      const previous = settingsRef.current;
+      const settings = await api.quickChange({ kind, enabled });
+      settingsRef.current = settings;
+      setSnapshot((s) => (s ? { ...s, settings } : s));
+      setDraft((current) =>
+        current && previous
+          ? mergeQuickChanges(current, previous, settings)
+          : settings,
+      );
+    });
+  };
   const newRule = () =>
     setEditing({
       id: crypto.randomUUID(),
@@ -564,9 +580,14 @@ export default function App() {
                     <h2>{t("Şimdi çalan")}</h2>
                     <Radio size={16} />
                   </div>
-                  <MediaControls player={status.player} disabled={busy || !desktop}
-                    onMedia={action => void execute(() => api.media(action))}
-                    onTransport={request => void execute(() => api.transport(request))} />
+                  <MediaControls
+                    player={status.player}
+                    disabled={busy || !desktop}
+                    onMedia={(action) => void execute(() => api.media(action))}
+                    onTransport={(request) =>
+                      void execute(() => api.transport(request))
+                    }
+                  />
                 </section>
                 <section className="panel rules-preview">
                   <div className="section-title">
@@ -845,6 +866,57 @@ export default function App() {
 
           {page === "settings" && (
             <div className="settings-stack">
+              {(snapshot.permissions.platform === "macOS" || !desktop) && (
+                <section className="panel">
+                  <div className="section-title">
+                    <h2>Deskody Notch</h2>
+                    <span className="small-badge">macOS</span>
+                  </div>
+                  <div className="setting-row">
+                    <div>
+                      <strong>{t("Notch üzerinde hızlı kontrol")}</strong>
+                      <p>
+                        {t(
+                          "Fareyi çentiğe götür; müziğin ve akış kontrolün hemen yanında.",
+                        )}
+                      </p>
+                    </div>
+                    <Toggle
+                      label="Deskody Notch"
+                      checked={snapshot.settings.notchEnabled ?? true}
+                      disabled={busy}
+                      onChange={(enabled) => void changeNotch("notch", enabled)}
+                    />
+                  </div>
+                  <div className="setting-row">
+                    <div>
+                      <strong>
+                        {t("Kapalı notch’ta çalan müziği göster")}
+                      </strong>
+                      <p>
+                        {t(
+                          "Kapak ve oynatma göstergesini çentiğin yanında göster. Kapatsan da fareyle açılan kontroller çalışır.",
+                        )}
+                      </p>
+                    </div>
+                    <Toggle
+                      label={t("Kapalı notch’ta çalan müziği göster")}
+                      checked={snapshot.settings.notchNowPlaying ?? true}
+                      disabled={
+                        busy || !(snapshot.settings.notchEnabled ?? true)
+                      }
+                      onChange={(enabled) =>
+                        void changeNotch("notchNowPlaying", enabled)
+                      }
+                    />
+                  </div>
+                  <small>
+                    {t(
+                      "Otomatik kaydedilir. Çentiksiz ekranlarda üst ortada görünür. Hareketi Azalt ayarına uyar.",
+                    )}
+                  </small>
+                </section>
+              )}
               <section className="panel">
                 <div className="section-title">
                   <h2>

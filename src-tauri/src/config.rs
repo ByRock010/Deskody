@@ -268,10 +268,16 @@ mod tests {
         let store = Store::new(directory.path());
         let mut legacy = serde_json::to_value(Settings::default()).unwrap();
         legacy.as_object_mut().unwrap().remove("language");
+        legacy.as_object_mut().unwrap().remove("notchEnabled");
+        legacy.as_object_mut().unwrap().remove("notchNowPlaying");
         legacy["rules"][0]["name"] = "Özel çalışma listem".into();
         std::fs::write(&store.path, serde_json::to_vec(&legacy).unwrap()).unwrap();
         let mut settings = store.load().unwrap();
         assert_eq!(settings.language, Language::En);
+        assert!(settings.notch_enabled);
+        assert!(settings.notch_now_playing);
+        settings.notch_enabled = false;
+        settings.notch_now_playing = false;
         assert_eq!(settings.rules[0].name, "Özel çalışma listem");
         settings.language = Language::Tr;
         store.save(&settings).unwrap();

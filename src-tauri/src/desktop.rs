@@ -52,6 +52,13 @@ mod mac_menu {
         pub fn deskody_menu_destroy();
         fn deskody_menu_snapshot(json: *const c_char);
         fn deskody_menu_result(error: *const c_char);
+        pub fn deskody_notch_create(
+            callback: unsafe extern "C" fn(*const c_char, *const c_char, bool),
+        ) -> bool;
+        pub fn deskody_notch_destroy();
+        pub fn deskody_notch_hide();
+        fn deskody_notch_snapshot(json: *const c_char);
+        fn deskody_notch_result(error: *const c_char);
     }
     pub fn initialize(app: &tauri::AppHandle) {
         let _ = APP.set(app.clone());
@@ -70,10 +77,30 @@ mod mac_menu {
         {
             unsafe {
                 deskody_menu_snapshot(json.as_ptr());
+                deskody_notch_snapshot(json.as_ptr());
             }
         }
     }
     pub unsafe extern "C" fn action(action: *const c_char, rule: *const c_char, enabled: bool) {
+        unsafe {
+            native_action(action, rule, enabled, false);
+        }
+    }
+    pub unsafe extern "C" fn notch_action(
+        action: *const c_char,
+        rule: *const c_char,
+        enabled: bool,
+    ) {
+        unsafe {
+            native_action(action, rule, enabled, true);
+        }
+    }
+    unsafe fn native_action(
+        action: *const c_char,
+        rule: *const c_char,
+        enabled: bool,
+        from_notch: bool,
+    ) {
         if action.is_null() || rule.is_null() {
             return;
         }
@@ -96,6 +123,10 @@ mod mac_menu {
             app.state::<Service>().observe_media();
             return;
         }
+        if action == "observeCompact" {
+            app.state::<Service>().observe_compact();
+            return;
+        }
         if action == "refresh" {
             app.state::<Service>().refresh();
             return;
@@ -108,6 +139,14 @@ mod mac_menu {
                 return;
             }
             let result = match action.as_str() {
+                "notch" => service
+                    .quick_change(QuickChange::Notch { enabled })
+                    .await
+                    .map(|_| ()),
+                "notchNowPlaying" => service
+                    .quick_change(QuickChange::NotchNowPlaying { enabled })
+                    .await
+                    .map(|_| ()),
                 "enabled" => service
                     .quick_change(QuickChange::Enabled { enabled })
                     .await
@@ -135,7 +174,12 @@ mod mac_menu {
                     .unwrap_or_default()
             });
             unsafe {
-                deskody_menu_result(error.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()));
+                let message = error.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
+                if from_notch {
+                    deskody_notch_result(message);
+                } else {
+                    deskody_menu_result(message);
+                }
             }
         });
     }
@@ -335,6 +379,10 @@ async fn spotify_connect(disconnect: bool, service: State<'_, Service>) -> Resul
 
 fn show(app: &tauri::AppHandle) {
     hide_panel(app);
+    #[cfg(target_os = "macos")]
+    unsafe {
+        mac_menu::deskody_notch_hide();
+    }
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
@@ -509,6 +557,9 @@ pub fn run() {
                 if !attached {
                     return Err("macOS menüsü oluşturulamadı".into());
                 }
+                if !unsafe { mac_menu::deskody_notch_create(mac_menu::notch_action) } {
+                    return Err("Deskody Notch oluşturulamadı".into());
+                }
             }
             #[cfg(not(target_os = "macos"))]
             let _ = tray;
@@ -548,6 +599,7 @@ pub fn run() {
         tauri::RunEvent::Exit => {
             #[cfg(target_os = "macos")]
             unsafe {
+                mac_menu::deskody_notch_destroy();
                 mac_menu::deskody_menu_destroy();
             }
             handle.state::<Service>().shutdown();

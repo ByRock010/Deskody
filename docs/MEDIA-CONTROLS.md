@@ -25,7 +25,8 @@ mechanism. Transport does not clear playlist ownership or reset the rule gate.
 Visible controls renew an `observe_media` lease every 2.5 seconds. It expires after
 six seconds; during the lease, media polling is at most one second apart. Main/tray
 webviews are checked for visibility by the backend. Native menu tracking renews the
-same lease. Merely opening controls does not restart automation or playlists.
+same lease. Merely opening controls does not restart automation or playlists. The macOS notch
+adds a slower compact observation lease; see [NOTCH.md](NOTCH.md).
 
 ## Adapters
 
@@ -55,7 +56,7 @@ remain unchanged.
 
 ## Artwork and extension compatibility
 
-`artwork.rs` fetches only selected-player covers while controls are observed. Network
+`artwork.rs` fetches only selected-player covers while controls or the compact macOS notch are observed. Network
 work runs on a bounded background channel; the automation worker and AppKit thread do
 not perform HTTP requests. HTTPS hosts are restricted to known artwork CDNs, redirects
 are disabled, timeout is four seconds and the compressed body limit is 1 MiB. Eight

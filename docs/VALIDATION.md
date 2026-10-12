@@ -1,3 +1,28 @@
+# Notch refinements — same 0.1.14 / 2026-10-13
+
+- Added `notchNowPlaying`, enabled by default for new/legacy settings. Settings saves it independently of the notch itself and unfinished form edits. Disabling it hides collapsed artwork/indicator, restores physical notch width and stops compact observation; hover controls remain available. Rust persistence/runtime tests and the English/Turkish Playwright flow passed, including restart, failed storage and retention while the parent notch is disabled.
+- Expanded content height changed from 230 to 172 points (about 25% less), retaining the camera-safe header. Opening/closing now uses a non-overshooting damped morph and coordinated content/wing crossfades. Native fixture tests passed in the current Space and another process's fullscreen Space, including actual control hit testing, intermediate closing geometry and rapid reversal without a geometry jump. The harness now places the cursor outside the notch before startup/re-enabling to avoid incidental hover during lifecycle assertions.
+- `npm run check`: TypeScript/Vite + 14 Vitest passed. Core Rust: 54 passed. Playwright language/settings + tray/media: 12 passed. macOS desktop Clippy (`--all-targets -- -D warnings`), Rustfmt and `git diff --check` passed. Screenshots of the smaller expanded host and plain collapsed notch were captured and visually inspected. Windows x64 GNU desktop `cargo check --offline` also passed; this is a compile check, not a Windows runtime test.
+- This refinement preserves app version **0.1.14** at the owner's request. Extension unchanged. Native tests use fixture media/callbacks, without changing real playback or personal settings; physical sleep/hot-plug and older macOS versions retain the acceptance limits in [NOTCH.md](NOTCH.md).
+- Rebuilt ARM64 app/DMG and installed `/Applications/Deskody.app`; strict ad-hoc signature, DMG checksum and one running instance verified. User settings/pairing files unchanged. Previous installation backed up under `.tools/installed-backups/20261013-001434/`. The DMG path remains `src-tauri/target/release/bundle/dmg/Deskody_0.1.14_aarch64.dmg`; its new SHA-256 is `d78a1d6c6b6a4a4a802f229c1e22962c666379dde14b763405cdc8c9ee2d30a8`. The initial-build checksum below is historical and no longer identifies the current DMG. Not notarized.
+
+---
+
+# Initial Deskody Notch build — 0.1.14 / 2026-10-13
+
+- `python3 scripts/test-native-notch.py`: gerçek AppKit notch host'u normal Space ve başka sürecin tam ekran Space'inde geçti. Hover gecikmesi, ayrılma/geri dönme toleransı, gerçek NSView hit testing, kamera altı yerleşim, kapak, hedefli önceki/sonraki/seek payload'ları, duraklatılmış seek, hata sonrası committed durum, kapatma/yeniden açma, suspend/wake bildirimleri, Reduce Motion ve teardown doğrulandı. Ön uygulama/Space korunur. Test kendi fixture metadata'sını ve callback'ini kullanır; gerçek müzik çalmaz, kullanıcı ayarlarını değiştirmez; fareyi geçici taşıyıp geri koyar.
+- `python3 scripts/test-native-menu.py`: normal ve ayrı tam ekran Space'te başarılı. Yeni notch menü tercihi ve checkmark'ı, mevcut akış/kural kontrolleri ve hedefli medya komutları sınandı.
+- `npm run check`: TypeScript/Vite üretim derlemesi ve 14 Vitest başarılı. Rust çekirdek testleri: 54 başarılı. Sunum tercihlerinin oynatma/iptal/gate durumunu koruması, eski ayarlardaki varsayılan notch tercihi ve kalıcı kayıt doğrulandı. Ana uygulama/tray/dil Playwright dosyaları (20 test) geçti; notch tercihi ilgisiz kaydedilmemiş alanı korur ve depolama hatasında geri alınır.
+- macOS desktop tüm target'lar Clippy `-D warnings`, Rustfmt ve `git diff --check` başarılı. Windows x64 GNU için varsayılan desktop feature ile `cargo check --offline` başarılı. Windows kurulum/runtime testi yapılmadı; notch yalnızca macOS'ta derlenir, diğer platformların paneli korunur.
+- ARM64 `.app`/`.dmg` üretildi. Ad-hoc imzanın strict doğrulaması ve `hdiutil verify` başarılı. `/Applications/Deskody.app` 0.1.14 kuruldu, tek çalışan örnek ve ayar/eşleştirme dosyalarının içeriklerinin aynı kaldığı doğrulandı. Önceki uygulama `.tools/installed-backups/20261013-000203/` altında yedeklendi. Deskody Bridge değişmedi; yeniden yüklemek gerekmez.
+- Görsel fixture ekran görüntüleri `/tmp/deskody-notch-compact.png` ve `/tmp/deskody-notch-expanded.png` incelendi. Fiziksel ekran takıp çıkarma, gerçek sistem uykusu, diğer notch uygulamalarıyla çakışma ve tüm macOS sürümleri ayrıca cihaz üzerinde test edilmedi. [Tasarım, araştırma ve test sınırları](NOTCH.md). Notarization uygulanmadı.
+
+DMG: `src-tauri/target/release/bundle/dmg/Deskody_0.1.14_aarch64.dmg`
+
+SHA-256: `ba7d70978464a7b867d09e85a83458dd39cda9b5cf3cc9d94e9a3404531a359f`
+
+---
+
 # Windows test paketi — 0.1.11 / 2026-09-11
 
 - `dist-releases/Deskody-0.1.11-Windows-x64-test.zip` üretildi: 2.752.684 bayt. NSIS kurulum EXE'si, Deskody Bridge 0.1.6 Chromium klasörü, Türkçe kurulum ve test sonuç formu, build bilgisi ve SHA-256 listesi içerir. Toplam 14 dosya; kişisel ayar/eşleştirme dosyası yoktur.

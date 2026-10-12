@@ -40,6 +40,7 @@ If documentation conflicts with code, investigate and correct it rather than cop
 | Rule forms/import/defaults | [src/settings.ts](src/settings.ts); backend equivalents in model/config below |
 | Localization | [locales/en.json](locales/en.json), [src/i18n.ts](src/i18n.ts), [src-tauri/src/i18n.rs](src-tauri/src/i18n.rs) |
 | Desktop lifecycle/IPC/tray | [src-tauri/src/desktop.rs](src-tauri/src/desktop.rs) |
+| macOS notch | [src-tauri/native/notch.m](src-tauri/native/notch.m), [notch.h](src-tauri/native/notch.h): hover NSPanel, geometry, animations, mouse hit testing; [docs/NOTCH.md](docs/NOTCH.md) |
 | Native macOS menu | [src-tauri/native/menu.m](src-tauri/native/menu.m), [src-tauri/native/menu.h](src-tauri/native/menu.h) |
 | Runtime coordination | [src-tauri/src/runtime.rs](src-tauri/src/runtime.rs): `Service`, serial command queue, snapshots, cancellation, quick changes |
 | Shared Rust contracts | [src-tauri/src/model.rs](src-tauri/src/model.rs): `Settings`, `Rule`, `Matcher`, `Action`, `Status`, `Language` |
@@ -71,6 +72,7 @@ The native macOS menu invokes the same service and receives a private JSON snaps
 - The serial worker owns native handles and media decisions. Avoid blocking OS/network work in React or on the AppKit main thread; AppKit UI work belongs on the main thread.
 - Quick changes operate on **current committed settings**, not an old full snapshot. Publish committed state before acknowledging a successful save. Preserve unrelated dirty forms in the main window.
 - Settings writes are validated and atomic. Do not silently replace corrupt configs or erase users' rules to fix a migration.
+- `Settings.notchEnabled` and `notchNowPlaying` default to true for legacy/new settings; `QuickChange::Notch` / `NotchNowPlaying` are presentation-only like language. Hiding collapsed metadata preserves hover, uses physical notch width and stops compact observation/decoration animation. Decorative views must pass hit tests through even during crossfades. The native notch is macOS-only and must not steal activation/key focus. Keep mouse-only monitoring and click-through outside its visible shape, stop monitors/timers when disabled/suspended, and respect Reduce Motion. Compact `observeCompact` uses a slower media lease; it must not restart automation.
 - `Settings.language` is `en | tr`; absent legacy fields default to `en`. Language changes use `QuickChange::Language`, preserving cancellation generation, playback ownership and gate state.
 - Turkish source strings are catalogue keys in `locales/en.json`; English values are shared by React and native presentation. Add both language paths for new UI/errors. Do not translate rule names, app identifiers/names, URLs or track metadata. Use structured playback activity for translating system reasons/actions separately from user data.
 
@@ -123,6 +125,7 @@ Use `CARGO_NET_OFFLINE=true` only when dependencies are already cached. If brows
 | --- | --- |
 | UI/rule editor/application picker | `npm run check`; `tests/app.spec.ts` |
 | Localization/persistence | `src/i18n.test.ts`, `tests/language.spec.ts`; Rust config/runtime tests |
+| macOS notch | `python3 scripts/test-native-notch.py`; native menu test; settings persistence/runtime tests; `tests/language.spec.ts` |
 | Quick controls/IPC | `tests/tray.spec.ts`; Rust runtime tests; on macOS `python3 scripts/test-native-menu.py` |
 | Rules/fades/URL validation | `npm run test:rust`; shared corpora in `tests/fixtures/`; frontend validation tests |
 | Media controls | `src/MediaControls.test.ts`, `tests/tray.spec.ts`, `tests/extension.spec.ts`; Rust transport/artwork tests; native menu tests |
@@ -131,7 +134,7 @@ Use `CARGO_NET_OFFLINE=true` only when dependencies are already cached. If brows
 | OS adapters/build config | Full desktop Clippy/build for affected OS; cross-checks are useful but do not prove runtime behavior |
 
 Playwright starts Vite automatically. A focused run is `npm run test:e2e -- tests/language.spec.ts`.
-Native menu tests need a logged-in macOS GUI session and briefly create fullscreen fixtures.
+Native menu/notch tests need a logged-in macOS GUI session and briefly create fullscreen fixtures; run them sequentially.
 The Spotify test's optional `--live` mode changes real playback; use it only within the user's authorized scope and report its limits.
 For documentation-only changes, check referenced paths/commands and `git diff --check`; do not rebuild or reinstall the app unnecessarily.
 

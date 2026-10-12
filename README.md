@@ -60,6 +60,28 @@ The macOS menu works in other Spaces and over fullscreen applications without ac
 
 The main window opens on first installation. With saved settings, later launches start in the menu bar. Reopening the app from Finder brings up the main window. Quick changes synchronize with the main window while preserving unrelated unsaved edits; opening Deskody does not replace the last external work context.
 
+## Deskody Notch (macOS)
+
+Hover over your Mac's notch to reveal music controls in a smoothly expanding black
+surface. It shows artwork, artist/track, seek, previous/play-pause/next, your active
+rule and flow control. Move away to collapse it; returning during the short close
+grace keeps it open. Using it leaves your current application and Space in place.
+
+The compact state shows a cover and playback indicator alongside the camera by default.
+Turn off **Show now playing when collapsed** in Settings → Deskody Notch to hide
+these wings; hovering still opens the controls. Both preferences save immediately
+and survive restarts. The expanded layout is compact, with a gently damped opening
+and a coordinated fade when closing. On
+screens without a notch, it uses a virtual notch at the top center. It chooses one
+notched display when available and recalculates placement when displays change.
+Reduce Motion is respected; sleep/session suspension stops hover observation.
+
+Enable or disable it in **Settings → Deskody Notch** or **Show notch** in the menu
+bar menu. The preference saves immediately and survives restarts. Spotify and
+YouTube Music use the same selected-player integration as the other media controls;
+no additional extension update is needed for this notch release. See
+[implementation and test limits](docs/NOTCH.md). Windows/Linux retain their quick panel.
+
 ## Now playing controls
 
 The main window and quick controls show album artwork, track/artist, elapsed/total time, a seek bar and previous/play-pause/next buttons. Controls target the selected player without activating its window. Seeking a paused track keeps it paused; skipping does not restart the rule's playlist. Unsupported controls (including restricted/ad/live playback) are disabled when the player reports that limitation. Covers unavailable offline use a music icon.
@@ -214,6 +236,7 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
 # macOS GUI session; uses temporary test windows, no user settings or music
 python3 scripts/test-native-menu.py
+python3 scripts/test-native-notch.py
 ```
 
 Tests cover rule priority, deceptive domains, PDFs, debounce, volume restoration, manual pause, playlist resumption, PKCE, bridge authentication, rule editing/import, application selection, tray IPC, language persistence and switching without restarting playback. Native menu tests cover the current Space and another application's fullscreen Space.
@@ -224,6 +247,6 @@ Real accounts, macOS TCC permissions and physical Windows/Linux desktop sessions
 
 Settings use the OS application configuration directory under `dev.musicoptimizer.desktop`. `DESKODY_CONFIG_DIR` selects a separate directory for testing; legacy `MUSIC_OPTIMIZER_CONFIG_DIR` remains supported with lower precedence. OAuth credentials are stored separately in the OS credential store.
 
-Writes use a temporary file, fsync and atomic replacement. Corrupt or unknown-version settings are not silently deleted: automation starts disabled with an error, and saving replaces the file. Up to 100 rules are accepted. Only the latest 40 activity events are kept in memory; active window titles and sanitized URLs are not written to disk. While media controls are visible, Deskody may request album artwork from allowlisted Spotify/YouTube artwork CDNs. Downloads have a size/time limit, follow no redirects and are cached only in memory. These requests expose the usual network metadata to the artwork provider; rules and active-app/browser context are not included. Optional Spotify Web API makes its own authenticated requests.
+Writes use a temporary file, fsync and atomic replacement. Corrupt or unknown-version settings are not silently deleted: automation starts disabled with an error, and saving replaces the file. Up to 100 rules are accepted. Only the latest 40 activity events are kept in memory; active window titles and sanitized URLs are not written to disk. While media controls or the compact notch are visible, Deskody may request album artwork from allowlisted Spotify/YouTube artwork CDNs. Downloads have a size/time limit, follow no redirects and are cached only in memory. These requests expose the usual network metadata to the artwork provider; rules and active-app/browser context are not included. Optional Spotify Web API makes its own authenticated requests.
 
 The app is **Deskody**, the extension **Deskody Bridge**, the macOS bundle `Deskody.app` and executable `deskody`. The displayed version comes directly from `package.json`. Legacy bundle identifiers, configuration paths, Spotify keyring service, Firefox extension ID and internal bridge events are intentionally retained so existing permissions, settings and pairing survive updates.

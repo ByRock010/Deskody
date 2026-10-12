@@ -141,6 +141,10 @@ static NSString *matcherName(NSDictionary *matcher) {
 }
 - (void)menuAction:(NSMenuItem *)item {
     if (self.busy && ![item.representedObject isEqual:@"open"] && ![item.representedObject isEqual:@"quit"]) return;
+    if ([item.representedObject isEqual:@"notch"]) {
+        [self send:@"notch" rule:nil enabled:[self.snapshot[@"settings"][@"notchEnabled"] isEqual:@NO]];
+        return;
+    }
     self.callback([item.representedObject UTF8String], "", false);
 }
 - (void)send:(NSString *)action rule:(NSString *)rule enabled:(BOOL)enabled {
@@ -269,6 +273,7 @@ static NSString *matcherName(NSDictionary *matcher) {
     body.view = self.content; [self.menu addItem:body];
     [self.menu addItem:NSMenuItem.separatorItem];
     [self.menu addItem:[self item:L(self.snapshot, @"Deskody’yi aç…") action:@"open"]];
+    [self.menu addItem:[self item:L(self.snapshot, @"Notch’u göster") action:@"notch"]];
     [self.menu addItem:[self item:L(self.snapshot, @"Durumu yenile") action:@"refresh"]];
     [self.menu addItem:[self item:L(self.snapshot, @"Deskody’den çık") action:@"quit"]];
 }
@@ -361,6 +366,7 @@ static NSString *matcherName(NSDictionary *matcher) {
         [self.content setFrameSize:NSMakeSize(326, height)];
     }
     for (NSMenuItem *item in self.menu.itemArray) if (item.action) {
+        if ([item.representedObject isEqual:@"notch"]) item.state = [settings[@"notchEnabled"] isEqual:@NO] ? NSControlStateValueOff : NSControlStateValueOn;
         item.enabled = !self.busy || [item.representedObject isEqual:@"open"] || [item.representedObject isEqual:@"quit"];
     }
 }

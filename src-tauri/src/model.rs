@@ -85,6 +85,10 @@ pub enum Language {
 pub struct Settings {
     #[serde(default)]
     pub language: Language,
+    #[serde(default = "default_notch_enabled")]
+    pub notch_enabled: bool,
+    #[serde(default = "default_notch_enabled")]
+    pub notch_now_playing: bool,
     pub version: u32,
     pub enabled: bool,
     pub provider: Provider,
@@ -100,6 +104,10 @@ pub struct Settings {
     pub pause_on_other_audio: bool,
     pub browser_bridge: bool,
     pub rules: Vec<Rule>,
+}
+
+fn default_notch_enabled() -> bool {
+    true
 }
 
 impl Settings {
@@ -150,6 +158,8 @@ impl Default for Settings {
         Self {
             version: 1,
             language: Language::En,
+            notch_enabled: true,
+            notch_now_playing: true,
             enabled: false,
             provider: Provider::Spotify,
             spotify_web: false,

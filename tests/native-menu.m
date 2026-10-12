@@ -16,6 +16,7 @@ static void action(const char *name, const char *rid, bool enabled) {
     if ([command isEqual:@"refresh"] || [command isEqual:@"observe"]) return;
     BOOL failure = failNext; failNext = NO;
     if (!failure) {
+        if ([command isEqual:@"notch"]) fixture[@"settings"][@"notchEnabled"] = @(enabled);
         if ([command isEqual:@"enabled"]) fixture[@"settings"][@"enabled"] = @(enabled);
         if ([command isEqual:@"rule"]) {
             for (NSMutableDictionary *rule in fixture[@"settings"][@"rules"]) {
@@ -98,7 +99,7 @@ static void action(const char *name, const char *rid, bool enabled) {
     [NSRunLoop.mainRunLoop addTimer:self.testTimer forMode:NSEventTrackingRunLoopMode];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 300 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
         [self.statusItem.button performClick:nil];
-        require(self.stage >= 9, @"menu actions complete before dismissal");
+        require(self.stage >= 10, @"menu actions complete before dismissal");
         require(!nativeMenu.tracking && !nativeMenu.timer, @"AppKit dismissal removes tracking timer");
         require(NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier == self.foregroundPID, @"closing preserves the other application");
         [self.testTimer invalidate];
@@ -170,6 +171,12 @@ static void action(const char *name, const char *rid, bool enabled) {
         case 8: {
             require([lastTransport[@"action"][@"kind"] isEqual:@"seek"] && [lastTransport[@"action"][@"trackId"] isEqual:@"track-a"] && [lastTransport[@"action"][@"position"] doubleValue] == 75, @"seek carries position and captured track identity");
             require([nativeMenu.elapsed.stringValue isEqual:@"1:15"], @"paused timeline reflects successful seek");
+            for (NSMenuItem *item in nativeMenu.menu.itemArray) if ([item.representedObject isEqual:@"notch"]) [nativeMenu menuAction:item];
+            break;
+        }
+        case 9: {
+            require([fixture[@"settings"][@"notchEnabled"] isEqual:@NO], @"native menu notch preference commits through quick change");
+            for (NSMenuItem *item in nativeMenu.menu.itemArray) if ([item.representedObject isEqual:@"notch"]) require(item.state == NSControlStateValueOff, @"notch menu checkmark follows committed state");
             NSEvent *escape = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:0 timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:nativeMenu.content.window.windowNumber context:nil characters:@"\x1b" charactersIgnoringModifiers:@"\x1b" isARepeat:NO keyCode:53];
             [NSApp postEvent:escape atStart:NO];
             break;

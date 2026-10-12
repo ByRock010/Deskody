@@ -23,6 +23,8 @@ export interface Rule {
 }
 export interface Settings {
   language: Language;
+  notchEnabled: boolean;
+  notchNowPlaying: boolean;
   version: number;
   enabled: boolean;
   provider: Provider;
@@ -103,5 +105,10 @@ export interface ActivityEntry {
   };
 }
 
-export type TransportAction = { kind: "next" | "previous" } | { kind: "seek"; position: number; trackId: string };
-export interface TransportRequest { playerId: string; action: TransportAction }
+export type TransportAction =
+  | { kind: "next" | "previous" }
+  | { kind: "seek"; position: number; trackId: string };
+export interface TransportRequest {
+  playerId: string;
+  action: TransportAction;
+}

@@ -450,5 +450,15 @@
   "Bu parçada konum değiştirme desteklenmiyor": "Seeking is unavailable for this track",
   "Oynatıcı bu medya kontrolünü desteklemiyor": "This player does not support this media control",
   "Oynatıcı medya komutunu reddetti": "The player rejected the media command",
-  "Geçersiz parça kimliği": "Invalid track identity"
+  "Geçersiz parça kimliği": "Invalid track identity",
+  "Notch üzerinde hızlı kontrol": "Quick controls in your notch",
+  "Fareyi çentiğe götür; müziğin ve akış kontrolün hemen yanında.": "Hover over the notch to bring your music and flow controls into view.",
+  "Otomatik kaydedilir. Çentiksiz ekranlarda üst ortada görünür. Hareketi Azalt ayarına uyar.": "Saved automatically. Appears at the top center on displays without a notch. Respects Reduce Motion.",
+  "Notch’u göster": "Show notch",
+  "Notch’u küçült": "Collapse notch",
+  "Müziğin, bir dokunuş uzağında.": "Your music, one touch away.",
+  "Kontroller için üzerine gel": "Hover for controls",
+  "Aktif kural yok": "No active rule",
+  "Kapalı notch’ta çalan müziği göster": "Show now playing when collapsed",
+  "Kapak ve oynatma göstergesini çentiğin yanında göster. Kapatsan da fareyle açılan kontroller çalışır.": "Show artwork and the playback indicator beside the notch. Hover controls still work when this is off."
 }

@@ -124,6 +124,28 @@ Mevcut YouTube Music sekmesinde sayfa içi (`yt-navigate`) yönlendirme kullanı
 
 Bağlantı açma işlemi en fazla 16 saniye onay bekler. Kullanıcının yeni kaydetme/duraklatma/kapatma komutu beklemeyi iptal eder; bekleyen eklenti işlemi de iptal edilir. Yeni bağlam taraması mevcut geçiş tamamlandıktan sonra yapılır. YouTube Music'in sayfa yapısı değişirse liste sayfasından ilk şarkıyı bulma uyarlama gerektirebilir; doğrudan `watch` bağlantıları bu adıma ihtiyaç duymaz.
 
+## Deskody Notch (macOS)
+
+Fareyi Mac’in çentiğine götürün: siyah yüzey yumuşakça açılıp kapak, parça/sanatçı,
+seek, önceki/oynat-duraklat/sonraki, aktif kural ve akış kontrolünü gösterir. Fareyi
+uzaklaştırınca küçülür; kısa kapanma gecikmesinde geri dönerseniz açık kalır.
+Kontrolleri kullanmak mevcut uygulamanızı veya Space’inizi değiştirmez.
+
+Kapalı halde kamera yanında küçük kapak ve oynatma göstergesi varsayılan olarak
+görünür. **Ayarlar → Deskody Notch → Kapalı notch’ta çalan müziği göster** ile
+bunları gizleyebilirsiniz; fareyle açılan kontroller çalışmaya devam eder. İki
+tercih de hemen kaydedilir ve yeniden açılışta hatırlanır. Açık panel daha kompakt
+bir yerleşim, yumuşak açılma ve kademeli kapanma geçişi kullanır. Çentiksiz
+ekranlarda üst ortada sanal çentik kullanılır. Varsa çentikli ekran seçilir; ekran
+bağlantısı değişince konum yeniden hesaplanır. Hareketi Azalt ayarına uyar;
+uyku/oturum askıya alınırken fare takibi durur.
+
+**Ayarlar → Deskody Notch** veya menü çubuğundaki **Notch’u göster** ile açıp
+kapatabilirsiniz. Tercih hemen kaydedilir ve sonraki açılışlarda hatırlanır. Spotify
+ve YouTube Music mevcut seçili oynatıcı entegrasyonunu kullanır; bu notch sürümü için
+ek eklenti güncellemesi gerekmez. [Uygulama ve test sınırları](docs/NOTCH.md).
+Windows/Linux mevcut hızlı paneli kullanmaya devam eder.
+
 ## Çalan müzik kontrolleri
 
 Ana pencere ve hızlı kontrollerde albüm kapağı, parça/sanatçı, geçen/toplam süre, seek çubuğu ve önceki/oynat-duraklat/sonraki düğmeleri bulunur. Komutlar seçili oynatıcıya gider; penceresini öne getirmez. Duraklatılmış parçada seek yapmak müziği başlatmaz; parça atlamak kuralın listesini yeniden açmaz. Oynatıcının desteklemediğini bildirdiği kontroller (reklam/canlı yayın/hesap kısıtları dahil) pasif kalır. Kapak yüklenemezse müzik simgesi gösterilir.
@@ -200,7 +222,7 @@ Gerçek Spotify/Apple Music hesapları, macOS TCC izinleri ve fiziksel Windows/L
 
 Varsayılan yol işletim sisteminin uygulama ayar dizinidir (`dev.musicoptimizer.desktop`). `DESKODY_CONFIG_DIR` ortam değişkeniyle ayrı bir ayar dizini seçilebilir; testlerde kullanıcı ayarlarını etkilemeden çalıştırmak içindir. OAuth token'ları bu override'dan bağımsız olarak sistem güvenli deposundadır.
 
-Ayarlar geçici dosya + fsync + atomik değiştirme ile kaydedilir. Bozuk veya bilinmeyen sürümlü ayarlar otomatik olarak silinmez; otomasyon kapalı başlar ve hata görünür. Kullanıcı kaydettiğinde dosya yenilenir. En fazla 100 kural kabul edilir. Son 40 etkinlik yalnızca bellektedir; aktif pencere başlığı ve temizlenmiş URL diske yazılmaz. Medya kontrolleri görünürken Deskody, izin verilen Spotify/YouTube kapak CDN’lerinden görsel isteyebilir. İndirmeler boyut ve süreyle sınırlıdır, yönlendirme izlemez ve yalnızca bellekte önbelleğe alınır. Görsel sağlayıcı normal ağ metadatasını görebilir; kurallar ve aktif uygulama/tarayıcı bağlamı bu isteklere eklenmez. İsteğe bağlı Spotify Web API ayrıca kimliği doğrulanmış istekler yapar.
+Ayarlar geçici dosya + fsync + atomik değiştirme ile kaydedilir. Bozuk veya bilinmeyen sürümlü ayarlar otomatik olarak silinmez; otomasyon kapalı başlar ve hata görünür. Kullanıcı kaydettiğinde dosya yenilenir. En fazla 100 kural kabul edilir. Son 40 etkinlik yalnızca bellektedir; aktif pencere başlığı ve temizlenmiş URL diske yazılmaz. Medya kontrolleri veya kompakt notch görünürken Deskody, izin verilen Spotify/YouTube kapak CDN’lerinden görsel isteyebilir. İndirmeler boyut ve süreyle sınırlıdır, yönlendirme izlemez ve yalnızca bellekte önbelleğe alınır. Görsel sağlayıcı normal ağ metadatasını görebilir; kurallar ve aktif uygulama/tarayıcı bağlamı bu isteklere eklenmez. İsteğe bağlı Spotify Web API ayrıca kimliği doğrulanmış istekler yapar.
 
 
 ### macOS sistem menüsü (0.1.9)

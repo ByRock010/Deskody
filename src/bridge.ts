@@ -60,12 +60,17 @@ export const api = {
     change:
       | { kind: "enabled"; enabled: boolean }
       | { kind: "rule"; id: string; enabled: boolean }
-      | { kind: "language"; language: "en" | "tr" },
+      | { kind: "language"; language: "en" | "tr" }
+      | { kind: "notch"; enabled: boolean }
+      | { kind: "notchNowPlaying"; enabled: boolean },
   ): Promise<Settings> => {
     if (desktop) return invoke("quick_change", { change });
     const settings = preview().settings;
     if (change.kind === "language") settings.language = change.language;
     else if (change.kind === "enabled") settings.enabled = change.enabled;
+    else if (change.kind === "notch") settings.notchEnabled = change.enabled;
+    else if (change.kind === "notchNowPlaying")
+      settings.notchNowPlaying = change.enabled;
     else
       settings.rules = settings.rules.map((r) =>
         r.id === change.id ? { ...r, enabled: change.enabled } : r,
@@ -93,8 +98,10 @@ export const api = {
   },
   permission: (kind: string): Promise<Permissions> =>
     invoke("request_permission", { kind }),
-  transport: (request: TransportRequest): Promise<void> => invoke("media_transport", { request }),
-  observeMedia: (): Promise<void> => desktop ? invoke("observe_media") : Promise.resolve(),
+  transport: (request: TransportRequest): Promise<void> =>
+    invoke("media_transport", { request }),
+  observeMedia: (): Promise<void> =>
+    desktop ? invoke("observe_media") : Promise.resolve(),
   media: (action: string): Promise<void> => invoke("media_action", { action }),
   refresh: (): Promise<void> =>
     desktop ? invoke("refresh_status") : Promise.resolve(),
