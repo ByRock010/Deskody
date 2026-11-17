@@ -62,19 +62,27 @@ The main window opens on first installation. With saved settings, later launches
 
 ## Deskody Notch (macOS)
 
-Hover over your Mac's notch to reveal music controls in a smoothly expanding black
-surface. It shows artwork, artist/track, seek, previous/play-pause/next, your active
+Move the pointer to the screen's top edge over your Mac's notch to reveal music
+controls in a smoothly expanding black surface. It shows artwork, artist/track, seek, previous/play-pause/next, your active
 rule and flow control. Move away to collapse it; returning during the short close
-grace keeps it open. Using it leaves your current application and Space in place.
+grace keeps it open. After pressing collapse, move away and return to reopen.
+Using it leaves your current application and Space in place.
 
 The compact state shows a cover and playback indicator alongside the camera by default.
 Turn off **Show now playing when collapsed** in Settings → Deskody Notch to hide
-these wings; hovering still opens the controls. Both preferences save immediately
+these wings; hovering still opens the controls. These preferences save immediately
 and survive restarts. The expanded layout is compact, with a gently damped opening
 and a coordinated fade when closing. On
 screens without a notch, it uses a virtual notch at the top center. It chooses one
 notched display when available and recalculates placement when displays change.
 Reduce Motion is respected; sleep/session suspension stops hover observation.
+
+By default, the notch appears only on desktop Spaces, including after upgrading an
+existing installation. Enable **Settings → Deskody Notch → Show in fullscreen apps**
+to also show it above fullscreen applications. This saves immediately without
+interrupting playback. When enabled, Space changes retain the notch's stationary
+surface and open/collapsed state. Seeking previews the time while dragging and keeps
+the requested position while the player confirms it.
 
 Enable or disable it in **Settings → Deskody Notch** or **Show notch** in the menu
 bar menu. The preference saves immediately and survives restarts. Spotify and
@@ -163,6 +171,15 @@ https://music.youtube.com/watch?v=LkoXilp7FPY&start_radio=1
 Playlist, mix and radio ordering is determined by YouTube Music. Deskody uses the existing tab/PWA and its in-page navigation without bringing it forward or triggering “Leave app?” by replacing the page. Volume transitions and playback verification use the media element's elapsed time. On failure, volume is restored; an acknowledgement timeout does not automatically pause an already playing track. Explicit cancellation stops a pending operation.
 
 A content command waits up to 16 seconds for acknowledgement. New playback/settings/quit commands cancel a pending transition; changing only the display language does not. New context scanning resumes after the transition. If autoplay is blocked, manually play once and retry. YouTube Music DOM changes may require updating playlist-page extraction; direct `watch` links avoid that step.
+
+Deskody Bridge 0.1.8 delivers manual commands through a waiting local connection,
+reducing the heartbeat delay for play/pause, skips and seeking. Update the extension
+as well as the app to use it; YouTube Music buffering can still take time.
+
+Bridge 0.1.9 keeps duration, position and seeking on YouTube Music's content timeline
+and rejects mixed samples during track changes. Total-time labels follow YouTube
+Music's own progress bar while seek limits keep the precise track length. Update/reload the extension and
+refresh YouTube Music to apply this timing fix; pairing is retained.
 
 After updating extension files, click **Reload** in the browser extension manager and refresh the YTM tab/PWA. Pairing is retained. You do not need to change the macOS language or Apple Events JavaScript settings.
 

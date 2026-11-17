@@ -2,6 +2,10 @@ let richMediaSupported = false;
 import { youtubeMusicUrl } from "./media-target.js";
 const api = globalThis.chrome;
 let busy = false;
+let reportPending = false;
+let fastCommandsSupported = false;
+let listening = false;
+let handling = null;
 let acknowledged = null;
 let commandError = null;
 let cachedToken = "";
@@ -79,7 +83,7 @@ function startOpen(music, command, musicState) {
         });
         await api.storage.session.remove("pendingOpen");
         executing = null;
-        setTimeout(report, 30);
+        void report();
       }
     }
   })();
@@ -95,25 +99,126 @@ api.storage.onChanged.addListener((changes) => {
   }
 });
 
+function musicTab(tabs) {
+  const candidates = tabs.filter(
+    (t) => !t.incognito && t.url?.startsWith("https://music.youtube.com/"),
+  );
+  const tab =
+    candidates.find((t) => t.id === lastMusicTab) ||
+    candidates.find((t) => t.audible) ||
+    candidates[0];
+  if (tab) lastMusicTab = tab.id;
+  return tab;
+}
+
+async function handleCommand(command, music, musicState) {
+  if (executing && command?.id !== executing.id) {
+    if (!executing.cancelling) {
+      executing.cancelling = true;
+      void api.tabs
+        .sendMessage(executing.tabId, {
+          type: "command",
+          command: { action: "cancel", id: executing.id },
+        })
+        .catch(() => {});
+    }
+    return;
+  }
+  if (!command || command.id === acknowledged || handling || executing) return;
+  handling = command.id; // Claim before any await: report and command channel can race.
+  try {
+    if (!music) music = musicTab(await api.tabs.query({}));
+    if (
+      !musicState &&
+      music &&
+      (command.action === "open" || command.action === "transition")
+    ) {
+      try {
+        musicState = await api.tabs.sendMessage(music.id, { type: "state" });
+      } catch {
+        musicState = {};
+      }
+    }
+    if (command.action === "open" || command.action === "transition") {
+      startOpen(music, command, musicState || {});
+      return;
+    }
+    commandError = null;
+    try {
+      if (!music) throw new Error("YouTube Music sekmesi bulunamadı");
+      const result = await api.tabs.sendMessage(music.id, {
+        type: "command",
+        command,
+      });
+      if (!result?.ok)
+        throw new Error(result?.error || "Oynatıcı komutu onaylamadı");
+    } catch (error) {
+      commandError = String(error.message || error).slice(0, 1000);
+    }
+    acknowledged = command.id;
+    await api.storage.session.set({
+      lastAck: acknowledged,
+      lastCommandError: commandError,
+    });
+  } finally {
+    handling = null;
+    // Publish fresh post-command metadata and acknowledgement together, immediately.
+    void report();
+  }
+}
+
+async function listenForCommands() {
+  if (listening || !fastCommandsSupported || !cachedToken) return;
+  listening = true;
+  try {
+    while (fastCommandsSupported && cachedToken) {
+      try {
+        const response = await fetch("http://127.0.0.1:43827/commands", {
+          headers: {
+            Authorization: `Bearer ${cachedToken}`,
+            "x-deskody-after": executing?.id || handling || acknowledged || "",
+          },
+          signal: AbortSignal.timeout(22000),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const command = await response.json();
+        // A long-poll timeout isn't cancellation. POST /context remains authoritative
+        // for cancellation and legacy compatibility.
+        if (command) {
+          await handleCommand(command);
+          if (handling || (executing && command.id !== executing.id))
+            await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 750));
+      }
+    }
+  } finally {
+    listening = false;
+  }
+}
+
 async function report() {
-  if (busy || !cachedToken) return;
+  if (!cachedToken) return;
+  if (busy) {
+    reportPending = true;
+    return;
+  }
   busy = true;
   try {
     await sessionReady;
+    // Bind the acknowledgement to the state-read generation. A fast command can
+    // finish while tabs.sendMessage is awaiting an older snapshot; that snapshot
+    // must never acknowledge the newer command. Its completion queues a fresh report.
+    const reportAck = acknowledged;
+    const reportError = commandError;
     const tabs = await api.tabs.query({});
     const window = await api.windows.getLastFocused();
     // Never send incognito context. No history, query strings or page content leave the browser.
     const active = tabs.find(
       (t) => t.windowId === window.id && t.active && !t.incognito,
     );
-    const musicTabs = tabs.filter(
-      (t) => !t.incognito && t.url?.startsWith("https://music.youtube.com/"),
-    );
-    const music =
-      musicTabs.find((t) => t.id === lastMusicTab) ||
-      musicTabs.find((t) => t.audible) ||
-      musicTabs[0];
-    if (music) lastMusicTab = music.id;
+    const music = musicTab(tabs);
     let musicState = {};
     if (music) {
       try {
@@ -158,8 +263,8 @@ async function report() {
         musicVolume: musicState.volume ?? null,
         musicTitle: musicState.title || "",
         ...(richMediaSupported ? { music: musicState.media || null } : {}),
-        acknowledged,
-        commandError,
+        acknowledged: reportAck,
+        commandError: reportError,
       }),
     });
     if (!response.ok)
@@ -168,42 +273,13 @@ async function report() {
           ? "Eşleştirme anahtarını ve masaüstü köprüsünü kontrol edin."
           : `HTTP ${response.status}`,
       );
-    richMediaSupported = response.headers.get("x-deskody-media-version") === "1";
+    richMediaSupported =
+      response.headers.get("x-deskody-media-version") === "1";
     const command = await response.json();
-    if (executing && command?.id !== executing.id) {
-      if (!executing.cancelling) {
-        executing.cancelling = true;
-        void api.tabs
-          .sendMessage(executing.tabId, {
-            type: "command",
-            command: { action: "cancel", id: executing.id },
-          })
-          .catch(() => {});
-      }
-    } else if (command && command.id !== acknowledged && !executing) {
-      if (command.action === "open" || command.action === "transition") {
-        startOpen(music, command, musicState);
-      } else {
-        commandError = null;
-        try {
-          if (!music) throw new Error("YouTube Music sekmesi bulunamadı");
-          const result = await api.tabs.sendMessage(music.id, {
-            type: "command",
-            command,
-          });
-          if (!result?.ok)
-            throw new Error(result?.error || "Oynatıcı komutu onaylamadı");
-        } catch (error) {
-          commandError = String(error.message || error).slice(0, 1000);
-        }
-        acknowledged = command.id;
-        await api.storage.session.set({
-          lastAck: acknowledged,
-          lastCommandError: commandError,
-        });
-        setTimeout(report, 30);
-      }
-    }
+    fastCommandsSupported =
+      response.headers.get("x-deskody-command-version") === "1";
+    void listenForCommands();
+    await handleCommand(command, music, musicState);
     await api.storage.session.set({
       connection: "Bağlı",
       lastSeen: Date.now(),
@@ -214,6 +290,10 @@ async function report() {
     });
   } finally {
     busy = false;
+    if (reportPending) {
+      reportPending = false;
+      queueMicrotask(() => void report());
+    }
   }
 }
 

@@ -270,12 +270,15 @@ mod tests {
         legacy.as_object_mut().unwrap().remove("language");
         legacy.as_object_mut().unwrap().remove("notchEnabled");
         legacy.as_object_mut().unwrap().remove("notchNowPlaying");
+        legacy.as_object_mut().unwrap().remove("notchFullscreen");
         legacy["rules"][0]["name"] = "Özel çalışma listem".into();
         std::fs::write(&store.path, serde_json::to_vec(&legacy).unwrap()).unwrap();
         let mut settings = store.load().unwrap();
         assert_eq!(settings.language, Language::En);
         assert!(settings.notch_enabled);
         assert!(settings.notch_now_playing);
+        assert!(!settings.notch_fullscreen);
+        settings.notch_fullscreen = true;
         settings.notch_enabled = false;
         settings.notch_now_playing = false;
         assert_eq!(settings.rules[0].name, "Özel çalışma listem");

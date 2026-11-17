@@ -62,7 +62,8 @@ export const api = {
       | { kind: "rule"; id: string; enabled: boolean }
       | { kind: "language"; language: "en" | "tr" }
       | { kind: "notch"; enabled: boolean }
-      | { kind: "notchNowPlaying"; enabled: boolean },
+      | { kind: "notchNowPlaying"; enabled: boolean }
+      | { kind: "notchFullscreen"; enabled: boolean },
   ): Promise<Settings> => {
     if (desktop) return invoke("quick_change", { change });
     const settings = preview().settings;
@@ -71,6 +72,8 @@ export const api = {
     else if (change.kind === "notch") settings.notchEnabled = change.enabled;
     else if (change.kind === "notchNowPlaying")
       settings.notchNowPlaying = change.enabled;
+    else if (change.kind === "notchFullscreen")
+      settings.notchFullscreen = change.enabled;
     else
       settings.rules = settings.rules.map((r) =>
         r.id === change.id ? { ...r, enabled: change.enabled } : r,

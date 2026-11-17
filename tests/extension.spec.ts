@@ -16,7 +16,7 @@ test("paired extension reports sanitized URLs to the loopback bridge", async () 
     commandError?: string;
     musicTransition?: boolean;
     musicVolume?: number;
-    music?: { track: string; artist: string; duration: number; position: number; canSeek: boolean; canNext: boolean; artwork: string };
+    music?: { track: string; artist: string; duration: number; displayDuration?: number; position: number; canSeek: boolean; canNext: boolean; artwork: string };
   }[] = [];
   let command: {
     id: string;
@@ -28,7 +28,23 @@ test("paired extension reports sanitized URLs to the loopback bridge", async () 
     position?: number;
     trackId?: string;
   } | null = null;
+  let pushOnly = false;
+  let commandRequests = 0;
   const server = createServer((request, response) => {
+    if (request.url === "/commands") {
+      commandRequests++;
+      const after = request.headers["x-deskody-after"];
+      const deadline = Date.now() + 20000;
+      const timer = setInterval(() => {
+        if ((command && command.id !== after) || Date.now() >= deadline) {
+          clearInterval(timer);
+          response.writeHead(200, { "Content-Type": "application/json" });
+          response.end(JSON.stringify(command?.id !== after ? command : null));
+        }
+      }, 10);
+      response.on("close", () => clearInterval(timer));
+      return;
+    }
     let body = "";
     request.on("data", (chunk) => {
       body += chunk;
@@ -43,8 +59,8 @@ test("paired extension reports sanitized URLs to the loopback bridge", async () 
       } catch {
         /* ignore non-JSON probes */
       }
-      response.writeHead(200, { "Content-Type": "application/json", "x-deskody-media-version": "1" });
-      response.end(JSON.stringify(command));
+      response.writeHead(200, { "Content-Type": "application/json", "x-deskody-media-version": "1", "x-deskody-command-version": "1" });
+      response.end(JSON.stringify(pushOnly ? null : command));
     });
   });
   await new Promise<void>((ok, reject) => {
@@ -187,6 +203,9 @@ test("paired extension reports sanitized URLs to the loopback bridge", async () 
     await expect
       .poll(() => bodies.some((b) => b.musicPlaying === true))
       .toBe(true);
+    await expect.poll(() => commandRequests).toBeGreaterThan(0);
+    pushOnly = true; // Heartbeats cannot deliver this command: only the fast channel can.
+    const pauseStarted = Date.now();
     command = { id: "pause-test", action: "pause", volume: null };
     await expect
       .poll(() =>
@@ -198,11 +217,14 @@ test("paired extension reports sanitized URLs to the loopback bridge", async () 
         .locator("audio")
         .evaluate((element: HTMLAudioElement) => element.paused),
     ).toBe(true);
+    expect(Date.now() - pauseStarted).toBeLessThan(1000);
+    pushOnly = false;
     expect(bodies[0].music).toBeUndefined(); // New metadata is negotiated, safe for old desktop versions.
     await expect.poll(() => bodies.some(b => b.music?.canSeek && b.music.canNext && b.music.track === "Fixture song" && b.music.artist === "Fixture artist")).toBe(true);
     expect(bodies.find(b => b.music?.canSeek)?.music?.duration).toBeCloseTo(1);
     command = { id: "seek-test", action: "seek", volume: null, position: 0.5, trackId: "aaaaaaaaaaa" };
     await expect.poll(() => bodies.some(b => b.acknowledged === "seek-test" && !b.commandError)).toBe(true);
+    expect(bodies.find(b => b.acknowledged === "seek-test")?.music?.position).toBeCloseTo(0.5, 1);
     expect(await page.locator("audio").evaluate((e:HTMLAudioElement)=>e.currentTime)).toBeCloseTo(0.5, 1);
     expect(await page.locator("audio").evaluate((e:HTMLAudioElement)=>e.paused)).toBe(true);
     for (const action of ["next", "previous"]) {
@@ -213,6 +235,55 @@ test("paired extension reports sanitized URLs to the loopback bridge", async () 
     command = { id: "stale-seek", action: "seek", volume: null, position: 0.1, trackId: "bbbbbbbbbbb" };
     await expect.poll(() => bodies.find(b => b.acknowledged === "stale-seek")?.commandError).toContain("Parça değişti");
     expect(await page.locator("audio").evaluate((e:HTMLAudioElement)=>e.currentTime)).toBeCloseTo(0.5, 1);
+    // Reproduce the reported 2:38 -> 3:58 corruption through the real extension:
+    // content/player time is 158 seconds, while the raw media advertises 238.
+    command = null;
+    const contentStart = bodies.length;
+    await page.evaluate(() => {
+      const p = document.querySelector("#movie_player") as any;
+      const audio = document.querySelector("audio")!;
+      const state = { id: "aaaaaaaaaaa", declared: 158, duration: 158, time: 153, seeks: [] as number[] };
+      (window as any).timelineFixture = { state, original: {
+        getVideoData: p.getVideoData, getPlayerResponse: p.getPlayerResponse,
+        getDuration: p.getDuration, getCurrentTime: p.getCurrentTime, seekTo: p.seekTo,
+      } };
+      Object.defineProperty(audio, "duration", { configurable: true, get: () => 238 });
+      const progress = document.createElement("div") as any;
+      progress.id = "progress-bar";
+      progress.max = 158; progress.value = 153;
+      document.querySelector("ytmusic-player-bar")!.append(progress);
+      p.getVideoData = () => ({ video_id: state.id, title: state.id, author: "Timeline fixture" });
+      p.getPlayerResponse = () => ({ videoDetails: { videoId: state.id, lengthSeconds: String(state.declared) } });
+      p.getDuration = () => state.duration;
+      p.getCurrentTime = () => state.time;
+      p.seekTo = (position: number) => { state.seeks.push(position); state.time = position; };
+    });
+    await expect.poll(() => bodies.slice(contentStart).some(b => b.music?.duration === 158 && b.music.position === 153)).toBe(true);
+    command = { id: "content-tail-seek", action: "seek", volume: null, position: 154, trackId: "aaaaaaaaaaa" };
+    await expect.poll(() => bodies.find(b => b.acknowledged === "content-tail-seek")).toBeTruthy();
+    const tailAck = bodies.find(b => b.acknowledged === "content-tail-seek");
+    expect(tailAck?.commandError).toBeFalsy();
+    expect(tailAck?.music?.duration).toBe(158);
+    expect(tailAck?.music?.position).toBe(154);
+    expect(tailAck?.music?.displayDuration).toBe(158);
+    expect(await page.evaluate(() => (window as any).timelineFixture.state.seeks)).toEqual([154]);
+    expect(await page.locator("audio").evaluate((e: HTMLAudioElement) => e.currentTime)).toBeCloseTo(.5, 1);
+    const nextStart = bodies.length;
+    await page.evaluate(() => Object.assign((window as any).timelineFixture.state, { id: "bbbbbbbbbbb", declared: 238 }));
+    await expect.poll(() => bodies.slice(nextStart).some(b => b.music?.duration === 238 && b.music.position == null && !b.music.canSeek)).toBe(true);
+    const loadedStart = bodies.length;
+    await page.evaluate(() => {
+      Object.assign((window as any).timelineFixture.state, { duration: 238.15, time: .2 });
+      Object.assign(document.querySelector("ytmusic-player-bar #progress-bar")!, { max: 238, value: .2 });
+    });
+    await expect.poll(() => bodies.slice(loadedStart).some(b => b.music?.duration === 238.15 && b.music.displayDuration === 238 && b.music.position === .2 && b.music.canSeek)).toBe(true);
+    await page.evaluate(() => {
+      const { original } = (window as any).timelineFixture;
+      Object.assign(document.querySelector("#movie_player")!, original);
+      delete (document.querySelector("audio") as any).duration;
+      document.querySelector("ytmusic-player-bar #progress-bar")!.remove();
+      delete (window as any).timelineFixture;
+    });
     command = { id: "volume-test", action: "volume", volume: 0.2 };
     await expect
       .poll(() =>

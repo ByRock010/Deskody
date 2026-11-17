@@ -206,7 +206,7 @@ export default function App() {
     });
   };
   const changeNotch = async (
-    kind: "notch" | "notchNowPlaying",
+    kind: "notch" | "notchNowPlaying" | "notchFullscreen",
     enabled: boolean,
   ) => {
     await execute(async () => {
@@ -907,6 +907,26 @@ export default function App() {
                       }
                       onChange={(enabled) =>
                         void changeNotch("notchNowPlaying", enabled)
+                      }
+                    />
+                  </div>
+                  <div className="setting-row">
+                    <div>
+                      <strong>{t("Tam ekran uygulamalarda göster")}</strong>
+                      <p>
+                        {t(
+                          "Varsayılan olarak yalnızca masaüstünde görünür. Açarsan tam ekran uygulamaların üzerinde de görünür.",
+                        )}
+                      </p>
+                    </div>
+                    <Toggle
+                      label={t("Tam ekran uygulamalarda göster")}
+                      checked={snapshot.settings.notchFullscreen ?? false}
+                      disabled={
+                        busy || !(snapshot.settings.notchEnabled ?? true)
+                      }
+                      onChange={(enabled) =>
+                        void changeNotch("notchFullscreen", enabled)
                       }
                     />
                   </div>

@@ -383,6 +383,7 @@ impl WithSpotify {
             let current = id == active;
             let restricted = d["is_restricted"].as_bool().unwrap_or(true);
             players.push(Player {
+                display_duration: None,
                 id: format!("spotify:web:{id}"),
                 name: format!("Spotify · {}", d["name"].as_str().unwrap_or("Cihaz")),
                 playing: Some(current && state["is_playing"].as_bool().unwrap_or(false)),

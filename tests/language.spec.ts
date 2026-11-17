@@ -169,3 +169,51 @@ test("collapsed now-playing preference is independent, persists, and preserves d
   await expect(page.getByRole("alert")).toContainText("Disk full");
   await expect(translated).not.toBeChecked();
 });
+
+test("fullscreen notch is opt-in, persists independently, and translates", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const fullscreen = page.getByRole("switch", {
+    name: "Show in fullscreen apps",
+    exact: true,
+  });
+  const notch = page.getByRole("switch", {
+    name: "Deskody Notch",
+    exact: true,
+  });
+  const fade = page.locator('input[type="range"]').last();
+  await expect(fullscreen).not.toBeChecked();
+  await fade.fill("2300");
+  await fullscreen.click();
+  await expect(fullscreen).toBeChecked();
+  await expect(fade).toHaveValue("2300");
+  const saved = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("deskody-preview-v1")!),
+  );
+  expect(saved.notchFullscreen).toBe(true);
+  expect(saved.fadeMs).toBe(600);
+  await page.reload();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(fullscreen).toBeChecked();
+  await notch.click();
+  await expect(fullscreen).toBeDisabled();
+  await notch.click();
+  await expect(fullscreen).toBeEnabled();
+  await expect(fullscreen).toBeChecked();
+  await page.getByLabel("App language").selectOption("tr");
+  const translated = page.getByRole("switch", {
+    name: "Tam ekran uygulamalarda göster",
+    exact: true,
+  });
+  await expect(translated).toBeChecked();
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new Error("Disk full");
+    };
+  });
+  await translated.click();
+  await expect(page.getByRole("alert")).toContainText("Disk full");
+  await expect(translated).toBeChecked();
+});

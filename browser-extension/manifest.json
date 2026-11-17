@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Deskody Bridge",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "description": "Connect active tabs and YouTube Music to your local Deskody app.",
   "permissions": ["tabs", "storage", "alarms"],
   "host_permissions": ["http://127.0.0.1:43827/*"],

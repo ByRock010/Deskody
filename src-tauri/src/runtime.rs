@@ -35,6 +35,7 @@ pub enum QuickChange {
     Language { language: Language },
     Notch { enabled: bool },
     NotchNowPlaying { enabled: bool },
+    NotchFullscreen { enabled: bool },
 }
 
 enum SettingsUpdate {
@@ -51,6 +52,9 @@ impl SettingsUpdate {
             Self::Quick(QuickChange::Notch { enabled }) => next.notch_enabled = enabled,
             Self::Quick(QuickChange::NotchNowPlaying { enabled }) => {
                 next.notch_now_playing = enabled
+            }
+            Self::Quick(QuickChange::NotchFullscreen { enabled }) => {
+                next.notch_fullscreen = enabled
             }
             Self::Quick(QuickChange::ToggleEnabled) => next.enabled = !next.enabled,
             Self::Quick(QuickChange::Rule { id, enabled }) => {
@@ -163,6 +167,7 @@ impl Service {
             QuickChange::Language { .. }
                 | QuickChange::Notch { .. }
                 | QuickChange::NotchNowPlaying { .. }
+                | QuickChange::NotchFullscreen { .. }
         ) {
             self.cancel.fetch_add(1, Ordering::Relaxed);
         }
@@ -256,6 +261,47 @@ fn log(status: &mut Status, message: String, level: &str) {
     status.activity.truncate(40);
 }
 
+fn publish_snapshot(
+    settings: &Settings,
+    status: &Status,
+    players: &[Player],
+    permissions: Permissions,
+    shared: &Mutex<Snapshot>,
+    emit: &impl Fn(Snapshot),
+) {
+    let snapshot = Snapshot {
+        settings: settings.clone(),
+        status: status.clone(),
+        permissions,
+        players: players.to_vec(),
+    };
+    if let Ok(mut state) = shared.lock() {
+        *state = snapshot.clone();
+    }
+    emit(snapshot);
+}
+
+fn refresh_command_player(
+    adapter: &mut dyn Platform,
+    settings: &Settings,
+    status: &mut Status,
+    players: &mut Vec<Player>,
+    artwork: &crate::artwork::ArtworkCache,
+) {
+    // A successful command already reached the player. A subsequent metadata failure
+    // must not turn it into a failed command or dispatch it a second time.
+    if let Ok(Some(mut player)) = adapter.selected_player(settings) {
+        player.normalize_timeline();
+        player.artwork = artwork.resolve(player.artwork.as_deref());
+        if let Some(existing) = players.iter_mut().find(|p| p.id == player.id) {
+            *existing = player.clone();
+        } else {
+            players.push(player.clone());
+        }
+        status.player = Some(player);
+    }
+}
+
 fn worker(
     store: Store,
     mut settings: Settings,
@@ -293,6 +339,7 @@ fn worker(
                     presentation.language = next.language;
                     presentation.notch_enabled = next.notch_enabled;
                     presentation.notch_now_playing = next.notch_now_playing;
+                    presentation.notch_fullscreen = next.notch_fullscreen;
                     let presentation_only = presentation == next;
                     let reset = next.provider != settings.provider
                         || next.spotify_web != settings.spotify_web
@@ -371,9 +418,8 @@ fn worker(
             Ok(Command::Transport(request, reply)) => {
                 let result: Result<()> = (|| {
                     // Re-read capabilities and identity when dequeuing: the UI may be stale.
-                    let fresh = adapter.players(&settings)?;
-                    let mut player = platform::selected(&fresh, &settings)
-                        .cloned()
+                    let mut player = adapter
+                        .selected_player(&settings)?
                         .ok_or_else(|| err("Önce açık bir oynatıcı seçin"))?;
                     player.normalize_timeline();
                     request.validate(&player)?;
@@ -382,9 +428,25 @@ fn worker(
                     controller.transport_requested();
                     Ok(())
                 })();
-                if let Err(e) = &result {
-                    status.error = Some(e.to_string());
+                status.error = result.as_ref().err().map(ToString::to_string);
+                if result.is_ok() {
+                    refresh_command_player(
+                        adapter.as_mut(),
+                        &settings,
+                        &mut status,
+                        &mut players,
+                        &artwork,
+                    );
                 }
+                status.manual_override = controller.manual_override;
+                publish_snapshot(
+                    &settings,
+                    &status,
+                    &players,
+                    adapter.permissions(),
+                    &shared,
+                    &emit,
+                );
                 let _ = reply.send(result);
                 refresh = true;
                 next_poll = Instant::now();
@@ -422,9 +484,25 @@ fn worker(
                     }
                     _ => Err(err("Bilinmeyen medya komutu")),
                 };
-                if let Err(e) = &result {
-                    status.error = Some(e.to_string());
+                status.error = result.as_ref().err().map(ToString::to_string);
+                if result.is_ok() {
+                    refresh_command_player(
+                        adapter.as_mut(),
+                        &settings,
+                        &mut status,
+                        &mut players,
+                        &artwork,
+                    );
                 }
+                status.manual_override = controller.manual_override;
+                publish_snapshot(
+                    &settings,
+                    &status,
+                    &players,
+                    adapter.permissions(),
+                    &shared,
+                    &emit,
+                );
                 let _ = reply.send(result);
                 refresh = true;
                 next_poll = Instant::now();
@@ -613,16 +691,14 @@ fn worker(
                 {
                     status.error = Some(error);
                 }
-                let snapshot = Snapshot {
-                    settings: settings.clone(),
-                    status: status.clone(),
-                    permissions: adapter.permissions(),
-                    players: players.clone(),
-                };
-                if let Ok(mut state) = shared.lock() {
-                    *state = snapshot.clone();
-                }
-                emit(snapshot);
+                publish_snapshot(
+                    &settings,
+                    &status,
+                    &players,
+                    adapter.permissions(),
+                    &shared,
+                    &emit,
+                );
                 refresh = false;
                 next_poll = Instant::now()
                     + Duration::from_millis(if Instant::now() < media_until {
@@ -836,12 +912,18 @@ mod tests {
             }))
             .await
             .unwrap();
-        harness.wait(|s| {
-            s.status
+        assert_eq!(
+            harness
+                .service
+                .get()
+                .unwrap()
+                .status
                 .player
-                .as_ref()
-                .is_some_and(|p| p.position == Some(60.0))
-        });
+                .unwrap()
+                .position,
+            Some(60.0),
+            "successful seek publishes fresh position before acknowledging the UI"
+        );
         harness
             .service
             .transport(request(TransportAction::Next))
@@ -949,6 +1031,18 @@ mod tests {
             assert_eq!(Store::new(harness.directory.path()).load().unwrap(), saved);
             harness.service.observe_compact();
             harness.wait(|s| s.settings.notch_now_playing == enabled);
+            assert_eq!(harness.service.cancel.load(Ordering::SeqCst), generation);
+            assert_eq!(harness.input.lock().unwrap().calls.len(), 1);
+        }
+        for enabled in [true, false] {
+            let saved = harness
+                .service
+                .quick_change(QuickChange::NotchFullscreen { enabled })
+                .await
+                .unwrap();
+            assert_eq!(saved.notch_fullscreen, enabled);
+            assert_eq!(Store::new(harness.directory.path()).load().unwrap(), saved);
+            harness.wait(|s| s.settings.notch_fullscreen == enabled);
             assert_eq!(harness.service.cancel.load(Ordering::SeqCst), generation);
             assert_eq!(harness.input.lock().unwrap().calls.len(), 1);
         }

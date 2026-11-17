@@ -23,6 +23,11 @@ static NSSize dnNotchSize(NSScreen *screen) {
     if (width < 80 || width > 400) width = 180;
     return NSMakeSize(width, MAX(24, height));
 }
+static BOOL dnScreenContainsPointer(NSRect frame, NSPoint point) {
+    // Include the top edge, but never points above this display.
+    return point.x >= NSMinX(frame) && point.x < NSMaxX(frame)
+        && point.y >= NSMinY(frame) && point.y <= NSMaxY(frame);
+}
 // Identical path topology in both states permits smooth, interruptible interpolation.
 static CGPathRef dnPath(CGRect r) CF_RETURNS_RETAINED;
 static CGPathRef dnPath(CGRect r) {
@@ -46,6 +51,8 @@ static CGPathRef dnPath(CGRect r) {
 @implementation DeskodyNotchPanel
 - (BOOL)canBecomeKeyWindow { return NO; }
 - (BOOL)canBecomeMainWindow { return NO; }
+// This overlay intentionally meets the physical top edge, including the menu-bar area.
+- (NSRect)constrainFrameRect:(NSRect)frameRect toScreen:(NSScreen *)screen { return frameRect; }
 @end
 @interface DeskodyNotchView : NSView
 @end
@@ -81,6 +88,8 @@ static CGPathRef dnPath(CGRect r) {
 @property(copy) NSString *playerID;
 @property(copy) NSString *trackID;
 @property BOOL dragging;
+@property double dragDuration;
+@property double dragDisplayDuration;
 @end
 @interface DeskodyNotchHost : NSObject
 @property DeskodyMenuAction callback;
@@ -116,14 +125,19 @@ static CGPathRef dnPath(CGRect r) {
 @property(strong) NSTimer *compactTimer;
 @property(strong) NSTimer *progressTimer;
 @property(strong) NSTimer *hoverTimer;
+@property(strong) NSTimer *spaceTimer;
+@property(strong) NSTimer *visibilityTimer;
 @property(strong) NSTimer *closeTimer;
 @property(copy) NSString *artworkSource;
 @property(copy) NSString *localError;
+@property(strong) NSDictionary *pendingSeek;
 @property BOOL expanded;
 @property BOOL busy;
 @property BOOL suspended;
 @property BOOL enabled;
 @property BOOL showNowPlaying;
+@property BOOL showFullscreen;
+@property BOOL hoverSuppressed;
 @property BOOL reducedMotion;
 @property BOOL visualizing;
 @property NSPoint lastPointer;
@@ -134,16 +148,22 @@ static CGPathRef dnPath(CGRect r) {
 - (void)applySnapshot:(NSDictionary *)snapshot;
 - (void)updatePointer:(NSPoint)point;
 - (void)setExpanded:(BOOL)expanded animated:(BOOL)animated;
+- (NSDictionary *)player;
 - (void)syncMedia;
+- (void)seekChanged:(DeskodyNotchSlider *)slider;
 - (void)stop;
 @end
 @implementation DeskodyNotchSlider
 - (BOOL)acceptsFirstMouse:(NSEvent *)event { return YES; }
 - (BOOL)needsPanelToBecomeKey { return NO; }
 - (void)mouseDown:(NSEvent *)event {
+    self.dragDuration = self.maxValue + .05;
+    self.dragDisplayDuration = [[self.host player][@"displayDuration"] doubleValue];
     self.dragging = YES;
     [super mouseDown:event];
     self.dragging = NO;
+    [self.host seekChanged:self]; // One transport request on release; changes above only preview.
+    self.dragDisplayDuration = 0;
     [self.host updatePointer:NSEvent.mouseLocation];
 }
 @end
@@ -168,26 +188,7 @@ static NSButton *dnButton(NSView *parent, NSRect frame, NSString *symbol, id tar
 @implementation DeskodyNotchHost
 - (instancetype)init {
     if (!(self = [super init])) return nil;
-    self.panel = [[DeskodyNotchPanel alloc] initWithContentRect:NSMakeRect(0, 0, 464, 280)
-        styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel backing:NSBackingStoreBuffered defer:NO];
-    self.panel.title = @"Deskody Notch";
-    self.panel.releasedWhenClosed = NO;
-    self.panel.floatingPanel = YES; self.panel.hidesOnDeactivate = NO;
-    self.panel.becomesKeyOnlyIfNeeded = YES;
-    self.panel.level = NSMainMenuWindowLevel + 1;
-    self.panel.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary
-        | NSWindowCollectionBehaviorStationary | NSWindowCollectionBehaviorIgnoresCycle;
-    if ([NSProcessInfo.processInfo isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){13, 0, 0}]) {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability-new"
-        self.panel.collectionBehavior |= NSWindowCollectionBehaviorCanJoinAllApplications;
-#pragma clang diagnostic pop
-    }
-    self.panel.opaque = NO; self.panel.backgroundColor = NSColor.clearColor;
-    self.panel.hasShadow = NO; self.panel.movable = NO;
-    self.panel.animationBehavior = NSWindowAnimationBehaviorNone;
-    self.panel.ignoresMouseEvents = YES;
-    self.panel.acceptsMouseMovedEvents = YES;
+    [self createPanelWithFrame:NSMakeRect(0, 0, 464, 280)];
     self.root = [[DeskodyNotchView alloc] initWithFrame:NSMakeRect(0, 0, 464, 280)];
     self.root.wantsLayer = YES;
     [self.root setAccessibilityLabel:@"Deskody Notch"];
@@ -227,7 +228,8 @@ static NSButton *dnButton(NSView *parent, NSRect frame, NSString *symbol, id tar
     self.titleLabel = dnLabel(self.body, NSMakeRect(96, 24, 315, 21), 16, YES);
     self.artistLabel = dnLabel(self.body, NSMakeRect(96, 47, 315, 17), 12, NO);
     self.seek = [[DeskodyNotchSlider alloc] initWithFrame:NSMakeRect(23, 69, 394, 16)];
-    self.seek.host = self; self.seek.continuous = NO;
+    self.seek.host = self; self.seek.continuous = YES;
+    self.seek.controlSize = NSControlSizeSmall;
     self.seek.target = self; self.seek.action = @selector(seekChanged:);
     self.seek.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
     [self.body addSubview:self.seek];
@@ -260,6 +262,59 @@ static NSButton *dnButton(NSView *parent, NSRect frame, NSString *symbol, id tar
     [workspace addObserver:self selector:@selector(accessibilityChanged:) name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification object:nil];
     return self;
 }
+- (void)createPanelWithFrame:(NSRect)frame {
+    self.panel = [[DeskodyNotchPanel alloc] initWithContentRect:frame
+        styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel backing:NSBackingStoreBuffered defer:NO];
+    self.panel.title = @"Deskody Notch";
+    self.panel.releasedWhenClosed = NO;
+    self.panel.floatingPanel = YES; self.panel.hidesOnDeactivate = NO;
+    self.panel.becomesKeyOnlyIfNeeded = YES;
+    self.panel.level = NSMainMenuWindowLevel + 1;
+    [self updateCollectionBehavior];
+    self.panel.opaque = NO; self.panel.backgroundColor = NSColor.clearColor;
+    self.panel.hasShadow = NO; self.panel.movable = NO;
+    self.panel.animationBehavior = NSWindowAnimationBehaviorNone;
+    self.panel.ignoresMouseEvents = YES;
+    self.panel.acceptsMouseMovedEvents = YES;
+    self.panel.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+}
+- (void)updateCollectionBehavior {
+    NSWindowCollectionBehavior behavior = NSWindowCollectionBehaviorCanJoinAllSpaces
+        | NSWindowCollectionBehaviorStationary | NSWindowCollectionBehaviorIgnoresCycle;
+    // FullScreenNone keeps this nonactivating panel on desktop Spaces.
+    behavior |= self.showFullscreen ? NSWindowCollectionBehaviorFullScreenAuxiliary : NSWindowCollectionBehaviorFullScreenNone;
+    // Avoid Clang's availability runtime helper: Rust links the final executable.
+    if ([NSProcessInfo.processInfo isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){13, 0, 0}]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
+        behavior |= NSWindowCollectionBehaviorCanJoinAllApplications;
+#pragma clang diagnostic pop
+    }
+    self.panel.collectionBehavior = behavior;
+}
+- (void)reconcileInteraction {
+    if (!self.enabled || self.suspended || !self.screen) return;
+    if (self.panel.visible && (self.showFullscreen || self.panel.onActiveSpace)) {
+        [self startInteraction];
+        [self syncMedia];
+    } else [self stopInteraction];
+}
+- (void)refreshVisibility {
+    if (!self.enabled || self.suspended || !self.screen) return;
+    if (!self.panel.visible) [self.panel orderFrontRegardless];
+    [self reconcileInteraction];
+    // Active-Space membership is asynchronous after ordering/changing collection behavior.
+    // Leave the panel ordered in: AppKit excludes it from fullscreen, and it can rejoin
+    // desktop Spaces without activation. Ordering it out here prevents that migration.
+    [self.visibilityTimer invalidate];
+    __weak DeskodyNotchHost *weakSelf = self;
+    self.visibilityTimer = [NSTimer scheduledTimerWithTimeInterval:.08 repeats:NO block:^(NSTimer *timer) {
+        (void)timer;
+        DeskodyNotchHost *host = weakSelf;
+        host.visibilityTimer = nil;
+        [host reconcileInteraction];
+    }];
+}
 - (void)layoutOnScreen:(NSScreen *)screen {
     self.screen = screen;
     self.notchSize = dnNotchSize(screen);
@@ -278,7 +333,6 @@ static NSButton *dnButton(NSView *parent, NSRect frame, NSString *symbol, id tar
     for (NSUInteger i=0; i<self.bars.count; i++) self.bars[i].frame = CGRectMake(center+self.notchSize.width/2+9+i*4, self.notchSize.height/2-6, 2.5, 12);
     self.collapse.frame = NSMakeRect(width-58, 3, 30, self.notchSize.height-5);
     self.open.frame = NSMakeRect(28, 3, 30, self.notchSize.height-5);
-    self.panel.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
     [self setExpanded:NO animated:NO];
 }
 - (void)updateClosedRect {
@@ -307,17 +361,30 @@ static NSButton *dnButton(NSView *parent, NSRect frame, NSString *symbol, id tar
     screen = screen ?: NSScreen.screens.firstObject;
     if (!screen) { [self stopInteraction]; self.screen = nil; [self.panel orderOut:nil]; return; }
     [self layoutOnScreen:screen];
-    [self startInteraction];
-    [self.panel orderFrontRegardless];
-    [self syncMedia];
+    [self spaceChanged:nil];
 }
 - (void)suspend:(NSNotification *)notification {
+    [self.spaceTimer invalidate]; self.spaceTimer = nil;
+    [self.visibilityTimer invalidate]; self.visibilityTimer = nil;
     self.suspended = YES; [self stopInteraction]; [self.panel orderOut:nil];
 }
 - (void)wake:(NSNotification *)notification { self.suspended = NO; [self screenChanged:nil]; }
 - (void)spaceChanged:(NSNotification *)notification {
-    [self setExpanded:NO animated:NO];
-    if (self.enabled && !self.suspended && self.screen) [self.panel orderFrontRegardless];
+    [self.spaceTimer invalidate]; self.spaceTimer = nil;
+    self.hoverSuppressed = NO;
+    // Fullscreen opt-in keeps the same stationary surface and hover state throughout
+    // Space swipes; do not collapse or reorder it at the transition notification.
+    if (!self.showFullscreen) [self setExpanded:NO animated:NO];
+    [self refreshVisibility];
+    if (!self.enabled || self.suspended || !self.screen) return;
+    // WindowServer may still be completing its Space transition at notification time.
+    __weak DeskodyNotchHost *weakSelf = self;
+    self.spaceTimer = [NSTimer scheduledTimerWithTimeInterval:.65 repeats:NO block:^(NSTimer *timer) {
+        (void)timer;
+        DeskodyNotchHost *host = weakSelf;
+        host.spaceTimer = nil;
+        [host refreshVisibility];
+    }];
 }
 - (void)accessibilityChanged:(NSNotification *)notification {
     self.reducedMotion = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion;
@@ -356,11 +423,19 @@ static NSButton *dnButton(NSView *parent, NSRect frame, NSString *symbol, id tar
 - (NSPoint)localPoint:(NSPoint)global {
     return NSMakePoint(global.x-NSMinX(self.panel.frame), NSMaxY(self.panel.frame)-global.y);
 }
+- (BOOL)containsPointerOnScreen:(NSPoint)point {
+    return self.screen && dnScreenContainsPointer(self.screen.frame, point);
+}
+- (BOOL)canHoverAt:(NSPoint)point {
+    return [self containsPointerOnScreen:point]
+        && NSPointInRect([self localPoint:point], NSInsetRect(self.closedRect, 0, -4))
+        && NSEvent.pressedMouseButtons == 0;
+}
 - (void)updatePointer:(NSPoint)point {
-    if (!self.enabled || self.suspended || !self.panel.visible) return;
+    if (!self.enabled || self.suspended || !self.panel.visible || !self.panel.onActiveSpace) return;
     self.lastPointer = point;
     NSPoint local = [self localPoint:point];
-    BOOL sameScreen = NSPointInRect(point, self.screen.frame);
+    BOOL sameScreen = [self containsPointerOnScreen:point];
     if (self.seek.dragging) return;
     if (self.expanded) {
         BOOL retained = sameScreen && NSPointInRect(local, NSInsetRect(self.openedRect, -10, -8));
@@ -379,15 +454,19 @@ static NSButton *dnButton(NSView *parent, NSRect frame, NSString *symbol, id tar
     } else {
         self.panel.ignoresMouseEvents = YES;
         // Do not activate from an adjacent display above the laptop or while dragging files.
-        BOOL hovering = sameScreen && NSPointInRect(local, NSInsetRect(self.closedRect, 0, -4)) && NSEvent.pressedMouseButtons == 0;
+        BOOL hovering = [self canHoverAt:point];
+        if (!hovering) self.hoverSuppressed = NO;
+        if (self.hoverSuppressed) return;
         if (!hovering) { [self.hoverTimer invalidate]; self.hoverTimer = nil; }
         else if (!self.hoverTimer) {
             __weak DeskodyNotchHost *weakSelf = self;
             self.hoverTimer = [NSTimer scheduledTimerWithTimeInterval:.14 repeats:NO block:^(NSTimer *timer) {
         (void)timer;
                 DeskodyNotchHost *host = weakSelf;
-                NSPoint pointer = [host localPoint:host.lastPointer];
-                if (host.enabled && !host.suspended && NSPointInRect(pointer, NSInsetRect(host.closedRect, 0, -4))) [host setExpanded:YES animated:YES];
+                NSPoint pointer = NSEvent.mouseLocation;
+                host.lastPointer = pointer;
+                if (host.enabled && !host.suspended && host.panel.visible && host.panel.onActiveSpace
+                    && !host.hoverSuppressed && [host canHoverAt:pointer]) [host setExpanded:YES animated:YES];
                 host.hoverTimer = nil;
             }];
         }
@@ -482,13 +561,24 @@ static NSButton *dnButton(NSView *parent, NSRect frame, NSString *symbol, id tar
 }
 - (void)syncTimeline {
     NSDictionary *player = [self player];
-    id duration = player[@"duration"], position = player[@"position"];
+    double now = NSDate.date.timeIntervalSince1970;
+    if (self.pendingSeek) {
+        NSDictionary *pending = self.pendingSeek;
+        BOOL same = [pending[@"playerId"] isEqual:player[@"id"]] && [pending[@"trackId"] isEqual:player[@"trackId"]];
+        BOOL confirmed = [player[@"sampledAt"] doubleValue] >= [pending[@"sentAt"] doubleValue]
+            && [player[@"position"] isKindOfClass:NSNumber.class]
+            && fabs([player[@"position"] doubleValue]-[pending[@"position"] doubleValue]) < 1.5;
+        if (!same || confirmed || now-[pending[@"sentAt"] doubleValue] > 3) self.pendingSeek = nil;
+    }
+    id duration = self.seek.dragging ? @(self.seek.dragDuration) : self.pendingSeek[@"duration"] ?: player[@"duration"];
+    id position = self.seek.dragging ? @(self.seek.doubleValue) : self.pendingSeek[@"position"] ?: player[@"position"];
     BOOL valid = [duration isKindOfClass:NSNumber.class] && [position isKindOfClass:NSNumber.class]
         && isfinite([duration doubleValue]) && [duration doubleValue] > 0 && isfinite([position doubleValue]);
     if (!self.seek.dragging) {
         double value = valid ? [position doubleValue] : 0;
-        if (valid && [player[@"playing"] isEqual:@YES] && [player[@"sampledAt"] isKindOfClass:NSNumber.class])
-            value += MAX(0, MIN(15, NSDate.date.timeIntervalSince1970-[player[@"sampledAt"] doubleValue]));
+        id sampledAt = self.pendingSeek[@"sentAt"] ?: player[@"sampledAt"];
+        if (valid && [player[@"playing"] isEqual:@YES] && [sampledAt isKindOfClass:NSNumber.class])
+            value += MAX(0, MIN(15, now-[sampledAt doubleValue]));
         self.seek.minValue = 0;
         self.seek.maxValue = valid ? MAX(0, [duration doubleValue]-.05) : 1;
         self.seek.doubleValue = MAX(0, MIN(self.seek.maxValue, value));
@@ -496,7 +586,10 @@ static NSButton *dnButton(NSView *parent, NSRect frame, NSString *symbol, id tar
         self.seek.enabled = self.expanded && !self.busy && valid && [player[@"canSeek"] boolValue];
     }
     self.elapsed.stringValue = valid ? dnTime(self.seek.doubleValue) : @"—:—";
-    self.duration.stringValue = [duration isKindOfClass:NSNumber.class] ? dnTime([duration doubleValue]) : @"—:—";
+    id labelDuration = self.seek.dragging ? (self.seek.dragDisplayDuration > 0 ? @(self.seek.dragDisplayDuration) : duration)
+        : self.pendingSeek[@"displayDuration"] ?: player[@"displayDuration"] ?: duration;
+    self.duration.stringValue = [labelDuration isKindOfClass:NSNumber.class] && [labelDuration doubleValue] > 0
+        ? dnTime(ceil([labelDuration doubleValue])) : @"—:—";
     [self.seek setAccessibilityLabel:dnL(self.snapshot, @"Oynatma konumu")];
     [self.seek setAccessibilityValueDescription:[NSString stringWithFormat:@"%@ / %@", self.elapsed.stringValue, self.duration.stringValue]];
 }
@@ -555,7 +648,7 @@ static NSButton *dnButton(NSView *parent, NSRect frame, NSString *symbol, id tar
         [self.cover setAccessibilityLabel:dnL(self.snapshot, @"Albüm kapağı")];
     }
     self.miniCover.toolTip = self.titleLabel.stringValue;
-    BOOL animate = playing && self.showNowPlaying && !self.expanded && !self.reducedMotion && self.enabled && !self.suspended;
+    BOOL animate = playing && self.showNowPlaying && !self.expanded && !self.reducedMotion && self.enabled && !self.suspended && self.panel.visible && (self.showFullscreen || self.panel.onActiveSpace) && self.globalMonitor;
     if (animate != self.visualizing) {
         self.visualizing = animate;
         for (NSUInteger i=0; i<self.bars.count; i++) {
@@ -574,13 +667,36 @@ static NSButton *dnButton(NSView *parent, NSRect frame, NSString *symbol, id tar
     BOOL showNowPlaying = ![snapshot[@"settings"][@"notchNowPlaying"] isEqual:@NO];
     BOOL compactChanged = showNowPlaying != self.showNowPlaying;
     self.showNowPlaying = showNowPlaying;
+    BOOL showFullscreen = [snapshot[@"settings"][@"notchFullscreen"] boolValue];
+    BOOL fullscreenChanged = showFullscreen != self.showFullscreen;
+    self.showFullscreen = showFullscreen;
     self.snapshot = snapshot;
+    if (fullscreenChanged) {
+        // WindowServer retains fullscreen eligibility on an existing NSPanel even after
+        // collectionBehavior changes. Recreate only the window; keep its content and
+        // shared service state. This also applies the preference in the current Space.
+        [self stopInteraction];
+        DeskodyNotchPanel *old = self.panel;
+        NSRect frame = old.frame;
+        [old orderOut:nil];
+        old.contentView = nil;
+        [self createPanelWithFrame:frame];
+        self.panel.contentView = self.root;
+        [old close];
+    }
     BOOL enabled = ![snapshot[@"settings"][@"notchEnabled"] isEqual:@NO];
     self.reducedMotion = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion;
     if (enabled != self.enabled) {
         self.enabled = enabled;
         if (enabled) [self screenChanged:nil];
-        else { [self stopInteraction]; [self.panel orderOut:nil]; }
+        else {
+            [self.spaceTimer invalidate]; self.spaceTimer = nil;
+            [self.visibilityTimer invalidate]; self.visibilityTimer = nil;
+            [self stopInteraction]; [self.panel orderOut:nil];
+        }
+    } else if (fullscreenChanged) {
+        if (compactChanged) [self updateClosedRect];
+        [self spaceChanged:nil];
     } else if (compactChanged) {
         [self updateClosedRect];
         [self updateCompactObservation];
@@ -602,13 +718,30 @@ static NSButton *dnButton(NSView *parent, NSRect frame, NSString *symbol, id tar
 }
 - (void)previousPressed:(id)sender { [self transport:@"previous" slider:nil]; }
 - (void)nextPressed:(id)sender { [self transport:@"next" slider:nil]; }
-- (void)seekChanged:(DeskodyNotchSlider *)slider { [self transport:@"seek" slider:slider]; }
+- (void)seekChanged:(DeskodyNotchSlider *)slider {
+    if (slider.dragging) { [self syncTimeline]; return; }
+    NSDictionary *player = [self player];
+    if (![slider.playerID isEqual:player[@"id"]] || ![slider.trackID isEqual:player[@"trackId"]] || self.busy) {
+        [self syncTimeline]; return;
+    }
+    self.pendingSeek = @{@"playerId":slider.playerID, @"trackId":slider.trackID,
+        @"position":@(slider.doubleValue), @"duration":@(slider.maxValue+.05),
+        @"displayDuration":slider.dragDisplayDuration > 0 ? @(slider.dragDisplayDuration)
+            : player[@"displayDuration"] ?: @(slider.maxValue+.05),
+        @"sentAt":@(NSDate.date.timeIntervalSince1970)};
+    [self transport:@"seek" slider:slider];
+}
 - (void)playPressed:(id)sender { [self send:[[self player][@"playing"] isEqual:@YES] ? @"pause" : @"play" payload:nil enabled:NO]; }
 - (void)flowPressed:(id)sender { [self send:@"enabled" payload:nil enabled:![self.snapshot[@"settings"][@"enabled"] boolValue]]; }
 - (void)resumePressed:(id)sender { [self send:@"resumeAutomation" payload:nil enabled:NO]; }
 - (void)openPressed:(id)sender { [self setExpanded:NO animated:NO]; self.callback("open", "", false); }
-- (void)collapsePressed:(id)sender { [self setExpanded:NO animated:YES]; }
+- (void)collapsePressed:(id)sender {
+    self.hoverSuppressed = YES;
+    [self setExpanded:NO animated:YES];
+}
 - (void)stop {
+    [self.spaceTimer invalidate]; self.spaceTimer = nil;
+    [self.visibilityTimer invalidate]; self.visibilityTimer = nil;
     self.enabled = NO;
     [self stopInteraction];
     [NSNotificationCenter.defaultCenter removeObserver:self];
@@ -648,7 +781,7 @@ void deskody_notch_snapshot(const char *json) {
 void deskody_notch_result(const char *error) {
     @autoreleasepool {
         NSString *message = error ? [NSString stringWithUTF8String:error] : nil;
-        dispatch_async(dispatch_get_main_queue(), ^{ notchHost.busy = NO; notchHost.localError = message; [notchHost syncMedia]; });
+        dispatch_async(dispatch_get_main_queue(), ^{ notchHost.busy = NO; notchHost.localError = message; if (message) notchHost.pendingSeek = nil; [notchHost syncMedia]; });
     }
 }
 void deskody_notch_hide(void) { if (NSThread.isMainThread) [notchHost setExpanded:NO animated:NO]; }

@@ -124,21 +124,41 @@ Mevcut YouTube Music sekmesinde sayfa içi (`yt-navigate`) yönlendirme kullanı
 
 Bağlantı açma işlemi en fazla 16 saniye onay bekler. Kullanıcının yeni kaydetme/duraklatma/kapatma komutu beklemeyi iptal eder; bekleyen eklenti işlemi de iptal edilir. Yeni bağlam taraması mevcut geçiş tamamlandıktan sonra yapılır. YouTube Music'in sayfa yapısı değişirse liste sayfasından ilk şarkıyı bulma uyarlama gerektirebilir; doğrudan `watch` bağlantıları bu adıma ihtiyaç duymaz.
 
+Deskody Bridge 0.1.8, manuel oynatma/duraklatma, parça değiştirme ve sarma komutlarını
+bekleyen yerel bağlantı üzerinden ileterek heartbeat beklemesini azaltır. Bu iyileştirme
+uygulama ve eklentinin birlikte güncellenmesini gerektirir. YouTube Music’in kendi
+yükleme süresi devam edebilir. Eklentiyi yeniden yükleyip YouTube Music sekmesini/PWA’yı
+yenileyin; eşleştirme korunur.
+
+Bridge 0.1.9, süre ve sarma işlemlerini aynı YouTube Music parçasının zaman çizelgesine
+bağlar; parça değişirken karışan süre/konum örneklerini kullanmaz. Toplam süre
+YouTube Music’in kendi çubuğundan doğrulanır; sarma sınırı gerçek, hassas süreyi korur. Düzeltme için
+eklentiyi yeniden yükleyip YouTube Music’i yenileyin; eşleştirme korunur.
+
 ## Deskody Notch (macOS)
 
-Fareyi Mac’in çentiğine götürün: siyah yüzey yumuşakça açılıp kapak, parça/sanatçı,
+Fareyi Mac’in çentiğinin üzerinde ekranın en üst kenarına götürün: siyah yüzey
+yumuşakça açılıp kapak, parça/sanatçı,
 seek, önceki/oynat-duraklat/sonraki, aktif kural ve akış kontrolünü gösterir. Fareyi
 uzaklaştırınca küçülür; kısa kapanma gecikmesinde geri dönerseniz açık kalır.
+Küçült düğmesine bastıktan sonra yeniden açmak için fareyi uzaklaştırıp geri getirin.
 Kontrolleri kullanmak mevcut uygulamanızı veya Space’inizi değiştirmez.
 
 Kapalı halde kamera yanında küçük kapak ve oynatma göstergesi varsayılan olarak
 görünür. **Ayarlar → Deskody Notch → Kapalı notch’ta çalan müziği göster** ile
-bunları gizleyebilirsiniz; fareyle açılan kontroller çalışmaya devam eder. İki
-tercih de hemen kaydedilir ve yeniden açılışta hatırlanır. Açık panel daha kompakt
+bunları gizleyebilirsiniz; fareyle açılan kontroller çalışmaya devam eder. Bu
+tercihler hemen kaydedilir ve yeniden açılışta hatırlanır. Açık panel daha kompakt
 bir yerleşim, yumuşak açılma ve kademeli kapanma geçişi kullanır. Çentiksiz
 ekranlarda üst ortada sanal çentik kullanılır. Varsa çentikli ekran seçilir; ekran
 bağlantısı değişince konum yeniden hesaplanır. Hareketi Azalt ayarına uyar;
 uyku/oturum askıya alınırken fare takibi durur.
+
+Notch, mevcut kurulumları güncelledikten sonra da varsayılan olarak yalnızca masaüstü
+Space’lerinde görünür. **Ayarlar → Deskody Notch → Tam ekran uygulamalarda göster**
+ile tam ekran uygulamaların üzerinde de görünmesini sağlayabilirsiniz. Bu tercih
+müziği kesmeden hemen kaydedilir. Açıkken Space değişimleri notch’un sabit yüzeyini
+ve açık/kapalı durumunu korur. Sarma sırasında süre canlı önizlenir; oynatıcı
+onaylayana kadar seçilen konum korunur.
 
 **Ayarlar → Deskody Notch** veya menü çubuğundaki **Notch’u göster** ile açıp
 kapatabilirsiniz. Tercih hemen kaydedilir ve sonraki açılışlarda hatırlanır. Spotify

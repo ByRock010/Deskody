@@ -156,6 +156,18 @@ static void action(const char *name, const char *rid, bool enabled) {
             require(nativeMenu.ruleSwitches[@"word"].state == NSControlStateValueOff, @"language rebuild preserves committed rule state");
             require(NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier == self.foregroundPID, @"language change does not activate Deskody");
             require(nativeMenu.seek.enabled && nativeMenu.next.enabled && nativeMenu.previous.enabled, @"native transport capabilities enable controls");
+            fixture[@"status"][@"player"][@"duration"] = @171.237097;
+            publishFixture(); [nativeMenu sync];
+            require([nativeMenu.duration.stringValue isEqual:@"2:52"] && fabs(nativeMenu.seek.maxValue-171.187097)<.0001,
+                @"native menu rounds total label without extending the seek range");
+            fixture[@"status"][@"player"][@"duration"] = @240.15;
+            fixture[@"status"][@"player"][@"displayDuration"] = @240;
+            publishFixture(); [nativeMenu sync];
+            require([nativeMenu.duration.stringValue isEqual:@"4:00"] && fabs(nativeMenu.seek.maxValue-240.1)<.0001,
+                @"native menu uses provider label without changing precise seek bounds");
+            [fixture[@"status"][@"player"] removeObjectForKey:@"displayDuration"];
+            fixture[@"status"][@"player"][@"duration"] = @180;
+            publishFixture(); [nativeMenu sync];
             [nativeMenu.next performClick:nil];
             break;
         }

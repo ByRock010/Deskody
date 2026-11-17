@@ -89,6 +89,8 @@ pub struct Settings {
     pub notch_enabled: bool,
     #[serde(default = "default_notch_enabled")]
     pub notch_now_playing: bool,
+    #[serde(default)]
+    pub notch_fullscreen: bool,
     pub version: u32,
     pub enabled: bool,
     pub provider: Provider,
@@ -160,6 +162,7 @@ impl Default for Settings {
             language: Language::En,
             notch_enabled: true,
             notch_now_playing: true,
+            notch_fullscreen: false,
             enabled: false,
             provider: Provider::Spotify,
             spotify_web: false,
@@ -208,6 +211,9 @@ pub struct Player {
     pub track_id: String,
     pub artwork: Option<String>,
     pub duration: Option<f64>,
+    /// Provider UI's total-time label; presentation only, never a seek bound.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_duration: Option<f64>,
     pub position: Option<f64>,
     pub sampled_at: Option<f64>,
     pub can_seek: bool,
@@ -279,6 +285,9 @@ impl Player {
         self.duration = self
             .duration
             .filter(|v| v.is_finite() && *v > 0.0 && *v <= 604800.0);
+        self.display_duration = self.display_duration.filter(|v| {
+            v.is_finite() && *v > 0.0 && self.duration.is_some_and(|d| (d - *v).abs() <= 3.0)
+        });
         self.position = self
             .position
             .filter(|v| v.is_finite() && *v >= 0.0)
@@ -323,6 +332,33 @@ impl TransportRequest {
 #[cfg(test)]
 mod transport_tests {
     use super::*;
+    #[test]
+    fn display_duration_never_changes_transport_bounds() {
+        let mut player = Player {
+            id: "browser:music.youtube.com".into(),
+            track_id: "track".into(),
+            duration: Some(171.237097),
+            display_duration: Some(172.0),
+            position: Some(153.0),
+            can_seek: true,
+            ..Player::default()
+        };
+        player.normalize_timeline();
+        assert_eq!(player.display_duration, Some(172.0));
+        assert_eq!(player.duration, Some(171.237097));
+        assert!(TransportRequest {
+            player_id: player.id.clone(),
+            action: TransportAction::Seek {
+                position: 171.5,
+                track_id: "track".into()
+            }
+        }
+        .validate(&player)
+        .is_err());
+        player.display_duration = Some(238.0);
+        player.normalize_timeline();
+        assert_eq!(player.display_duration, None);
+    }
     #[test]
     fn rejects_stale_and_unsupported_transport_commands() {
         let mut player = Player {

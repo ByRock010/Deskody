@@ -147,6 +147,10 @@ mod mac_menu {
                     .quick_change(QuickChange::NotchNowPlaying { enabled })
                     .await
                     .map(|_| ()),
+                "notchFullscreen" => service
+                    .quick_change(QuickChange::NotchFullscreen { enabled })
+                    .await
+                    .map(|_| ()),
                 "enabled" => service
                     .quick_change(QuickChange::Enabled { enabled })
                     .await

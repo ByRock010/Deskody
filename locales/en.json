@@ -460,5 +460,7 @@
   "Kontroller için üzerine gel": "Hover for controls",
   "Aktif kural yok": "No active rule",
   "Kapalı notch’ta çalan müziği göster": "Show now playing when collapsed",
-  "Kapak ve oynatma göstergesini çentiğin yanında göster. Kapatsan da fareyle açılan kontroller çalışır.": "Show artwork and the playback indicator beside the notch. Hover controls still work when this is off."
+  "Kapak ve oynatma göstergesini çentiğin yanında göster. Kapatsan da fareyle açılan kontroller çalışır.": "Show artwork and the playback indicator beside the notch. Hover controls still work when this is off.",
+  "Tam ekran uygulamalarda göster": "Show in fullscreen apps",
+  "Varsayılan olarak yalnızca masaüstünde görünür. Açarsan tam ekran uygulamaların üzerinde de görünür.": "Shown only on desktop Spaces by default. Enable to also show above fullscreen apps."
 }

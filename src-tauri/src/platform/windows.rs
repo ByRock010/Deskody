@@ -240,6 +240,7 @@ impl Platform for Windows {
                     None
                 };
             result.push(Player {
+                display_duration: None,
                 name: id.clone(),
                 id,
                 playing: Some(info.PlaybackStatus().map_err(native)? == Playback::Playing),

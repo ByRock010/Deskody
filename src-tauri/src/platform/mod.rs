@@ -13,6 +13,10 @@ pub trait Platform: Send {
     fn permissions(&self) -> Permissions;
     fn request_permission(&self, kind: &str) -> Result<()>;
     fn players(&mut self, settings: &Settings) -> Result<Vec<Player>>;
+    /// Fresh targeted metadata for interactive controls; adapters can avoid unrelated I/O.
+    fn selected_player(&mut self, settings: &Settings) -> Result<Option<Player>> {
+        Ok(selected(&self.players(settings)?, settings).cloned())
+    }
     fn play(&mut self, player: &str, uri: Option<&str>) -> Result<()>;
     fn pause(&mut self, player: &str) -> Result<()>;
     fn volume(&mut self, player: &str, value: f64) -> Result<()>;

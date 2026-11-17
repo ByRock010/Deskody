@@ -321,7 +321,9 @@ static NSString *matcherName(NSDictionary *matcher) {
         self.seek.enabled = !self.busy && timeline && [player[@"canSeek"] boolValue];
     }
     self.elapsed.stringValue = timeline ? mediaTime(@(self.seek.doubleValue)) : @"—:—";
-    self.duration.stringValue = mediaTime(rawDuration);
+    id labelDuration = player[@"displayDuration"] ?: rawDuration;
+    self.duration.stringValue = mediaTime([labelDuration isKindOfClass:NSNumber.class] && [labelDuration doubleValue] > 0
+        ? @(ceil([labelDuration doubleValue])) : nil);
     self.seek.toolTip = self.seek.enabled ? L(self.snapshot, @"Oynatma konumu") : L(self.snapshot, @"Bu parçada konum değiştirme desteklenmiyor");
     [self.seek setAccessibilityValueDescription:[NSString stringWithFormat:@"%@ / %@", self.elapsed.stringValue, self.duration.stringValue]];
     NSString *artwork = textValue(player[@"artwork"]);

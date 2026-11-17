@@ -133,7 +133,7 @@
               throw new Error(
                 "Tarayıcı otomatik oynatmayı engelledi. YouTube Music sayfasında bir kez Çal’a basıp tekrar dene.",
               );
-            if (state.playing && state.ready >= 2) {
+            if (state.playing && state.ready >= 2 && Number.isFinite(state.time)) {
               if (
                 progress &&
                 progress.mediaKey === state.mediaKey &&
@@ -176,7 +176,7 @@
             muted: s.muted,
             title: s.track || document.title,
             media: { trackId: s.videoId || "", track: s.track || document.title,
-              artist: s.artist || "", artwork: s.artwork, duration: s.duration,
+              artist: s.artist || "", artwork: s.artwork, duration: s.duration, displayDuration: s.displayDuration,
               position: s.time, sampledAt: s.sampledAt, canSeek: s.canSeek,
               canNext: s.canNext, canPrevious: s.canPrevious },
           }),

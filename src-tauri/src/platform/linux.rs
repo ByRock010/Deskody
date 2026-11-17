@@ -241,6 +241,7 @@ impl Platform for Linux {
             )
             .map_err(native)?;
             result.push(Player {
+                display_duration: None,
                 name: root.get_property("Identity").unwrap_or_else(|_| id.clone()),
                 playing: Some(state == "Playing"),
                 volume: proxy

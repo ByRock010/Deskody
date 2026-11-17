@@ -3,7 +3,7 @@ use axum::{
     extract::{DefaultBodyLimit, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -67,6 +67,7 @@ pub struct Bridge {
     token: String,
     sample: Option<(Instant, BrowserContext)>,
     command: Option<(Instant, BrowserCommand)>,
+    command_changed: Arc<tokio::sync::Notify>,
 }
 pub type SharedBridge = Arc<Mutex<Bridge>>;
 
@@ -110,10 +111,14 @@ impl Bridge {
         if !enabled {
             self.sample = None;
             self.command = None;
+            self.command_changed.notify_waiters();
         }
     }
     fn accept(&mut self, context: BrowserContext) -> Option<BrowserCommand> {
         self.sample = Some((Instant::now(), context));
+        self.pending_command()
+    }
+    fn pending_command(&self) -> Option<BrowserCommand> {
         self.command
             .as_ref()
             .filter(|(at, command)| {
@@ -215,8 +220,68 @@ async fn context(
     }
     (
         StatusCode::OK,
-        [("x-deskody-media-version", "1")],
+        [
+            ("x-deskody-media-version", "1"),
+            ("x-deskody-command-version", "1"),
+        ],
         Json(bridge.accept(context)),
+    )
+        .into_response()
+}
+
+// Authenticated, bounded long-poll: no page content, extra permissions or open socket
+// protocol. Old extensions keep using commands returned by POST /context.
+async fn commands(State(bridge): State<SharedBridge>, headers: HeaderMap) -> impl IntoResponse {
+    let after = headers
+        .get("x-deskody-after")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if after.len() > 80 {
+        return (StatusCode::BAD_REQUEST, Json(None::<BrowserCommand>)).into_response();
+    }
+    let changed = {
+        let Ok(b) = bridge.lock() else {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(None::<BrowserCommand>),
+            )
+                .into_response();
+        };
+        if !b.enabled || !authorized(&headers, &b.token) {
+            return (StatusCode::UNAUTHORIZED, Json(None::<BrowserCommand>)).into_response();
+        }
+        b.command_changed.clone()
+    };
+    let notified = changed.notified();
+    tokio::pin!(notified);
+    // Register before inspecting the slot, so a command cannot arrive in between.
+    notified.as_mut().enable();
+    {
+        let Ok(b) = bridge.lock() else {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(None::<BrowserCommand>),
+            )
+                .into_response();
+        };
+        if let Some(command) = b.pending_command().filter(|c| c.id != after) {
+            return (StatusCode::OK, Json(Some(command))).into_response();
+        }
+    }
+    let _ = tokio::time::timeout(Duration::from_secs(20), notified).await;
+    let Ok(b) = bridge.lock() else {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(None::<BrowserCommand>),
+        )
+            .into_response();
+    };
+    if !b.enabled || !authorized(&headers, &b.token) {
+        return (StatusCode::UNAUTHORIZED, Json(None::<BrowserCommand>)).into_response();
+    }
+    (
+        StatusCode::OK,
+        Json(b.pending_command().filter(|c| c.id != after)),
     )
         .into_response()
 }
@@ -234,6 +299,7 @@ pub async fn serve(bridge: SharedBridge) {
     };
     let app = Router::new()
         .route("/context", post(context))
+        .route("/commands", get(commands))
         .layer(DefaultBodyLimit::max(16384))
         .with_state(bridge.clone());
     if let Err(e) = axum::serve(listener, app).await {
@@ -283,6 +349,7 @@ fn send_command(bridge: &SharedBridge, command: BrowserCommand, cancel: &AtomicU
             ));
         }
         b.command = Some((Instant::now(), command));
+        b.command_changed.notify_waiters();
     }
     let deadline = Instant::now() + Duration::from_secs(if long { 16 } else { 3 });
     loop {
@@ -313,6 +380,47 @@ pub struct WithBrowser {
     pub native: Box<dyn crate::platform::Platform>,
     pub bridge: SharedBridge,
     pub cancel: Arc<AtomicU64>,
+}
+impl WithBrowser {
+    fn browser_player(&self) -> Option<Player> {
+        let s = self.bridge.lock().ok().and_then(|b| b.sample())?;
+        if s.music_playing.is_none() && !s.music_present {
+            return None;
+        }
+        Some(Player {
+            id: "browser:music.youtube.com".into(),
+            name: "YouTube Music · eklenti".into(),
+            playing: s.music_playing,
+            volume: s.music_volume,
+            track: s
+                .music
+                .as_ref()
+                .map(|m| m.track.clone())
+                .filter(|v| !v.is_empty())
+                .unwrap_or(s.music_title),
+            artist: s
+                .music
+                .as_ref()
+                .map(|m| m.artist.clone())
+                .unwrap_or_default(),
+            track_id: s
+                .music
+                .as_ref()
+                .map(|m| m.track_id.clone())
+                .unwrap_or_default(),
+            artwork: s.music.as_ref().and_then(|m| m.artwork.clone()),
+            duration: s.music.as_ref().and_then(|m| m.duration),
+            display_duration: s.music.as_ref().and_then(|m| m.display_duration),
+            position: s.music.as_ref().and_then(|m| m.position),
+            sampled_at: s.music.as_ref().and_then(|m| m.sampled_at),
+            can_seek: s.music.as_ref().is_some_and(|m| m.can_seek),
+            can_next: s.music.as_ref().is_some_and(|m| m.can_next),
+            can_previous: s.music.as_ref().is_some_and(|m| m.can_previous),
+            can_play: true,
+            can_pause: true,
+            can_open_uri: s.music_can_open,
+        })
+    }
 }
 impl crate::platform::Platform for WithBrowser {
     fn context(&mut self, settings: &Settings) -> Result<Context> {
@@ -362,7 +470,6 @@ impl crate::platform::Platform for WithBrowser {
     }
     fn players(&mut self, settings: &Settings) -> Result<Vec<Player>> {
         let native = self.native.players(settings);
-        let sample = self.bridge.lock().ok().and_then(|b| b.sample());
         let mut players = if settings.provider == Provider::System
             && settings.target_player == "browser:music.youtube.com"
         {
@@ -374,43 +481,19 @@ impl crate::platform::Platform for WithBrowser {
         } else {
             native?
         };
-        if let Some(s) = sample {
-            if s.music_playing.is_some() || s.music_present {
-                players.push(Player {
-                    id: "browser:music.youtube.com".into(),
-                    name: "YouTube Music · eklenti".into(),
-                    playing: s.music_playing,
-                    volume: s.music_volume,
-                    track: s
-                        .music
-                        .as_ref()
-                        .map(|m| m.track.clone())
-                        .filter(|v| !v.is_empty())
-                        .unwrap_or(s.music_title),
-                    artist: s
-                        .music
-                        .as_ref()
-                        .map(|m| m.artist.clone())
-                        .unwrap_or_default(),
-                    track_id: s
-                        .music
-                        .as_ref()
-                        .map(|m| m.track_id.clone())
-                        .unwrap_or_default(),
-                    artwork: s.music.as_ref().and_then(|m| m.artwork.clone()),
-                    duration: s.music.as_ref().and_then(|m| m.duration),
-                    position: s.music.as_ref().and_then(|m| m.position),
-                    sampled_at: s.music.as_ref().and_then(|m| m.sampled_at),
-                    can_seek: s.music.as_ref().is_some_and(|m| m.can_seek),
-                    can_next: s.music.as_ref().is_some_and(|m| m.can_next),
-                    can_previous: s.music.as_ref().is_some_and(|m| m.can_previous),
-                    can_play: true,
-                    can_pause: true,
-                    can_open_uri: s.music_can_open,
-                });
-            }
+        if let Some(player) = self.browser_player() {
+            players.push(player);
         }
         Ok(players)
+    }
+    fn selected_player(&mut self, settings: &Settings) -> Result<Option<Player>> {
+        if settings.provider == Provider::System
+            && settings.target_player == "browser:music.youtube.com"
+        {
+            Ok(self.browser_player())
+        } else {
+            self.native.selected_player(settings)
+        }
     }
     fn play(&mut self, player: &str, uri: Option<&str>) -> Result<()> {
         if player == "browser:music.youtube.com" {
@@ -533,6 +616,141 @@ mod tests {
                 .music_transition
         );
     }
+    #[tokio::test]
+    async fn command_channel_authenticates_wakes_and_stops_when_disabled() {
+        let bridge = Arc::new(Mutex::new(Bridge {
+            enabled: true,
+            token: "fixture".into(),
+            ..Bridge::default()
+        }));
+        bridge.lock().unwrap().accept(BrowserContext {
+            music_playing: Some(true),
+            ..BrowserContext::default()
+        });
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "127.0.0.1:43827".parse().unwrap());
+        headers.insert("authorization", "Bearer fixture".parse().unwrap());
+        let mut untrusted = headers.clone();
+        untrusted.insert("origin", "https://example.com".parse().unwrap());
+        assert_eq!(
+            commands(State(bridge.clone()), untrusted)
+                .await
+                .into_response()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let receiver_bridge = bridge.clone();
+        let receiver_headers = headers.clone();
+        let receiver = tokio::spawn(async move {
+            commands(State(receiver_bridge), receiver_headers)
+                .await
+                .into_response()
+        });
+        tokio::task::yield_now().await;
+        let sender_bridge = bridge.clone();
+        let sender = tokio::task::spawn_blocking(move || {
+            command(&sender_bridge, "pause", None, None, &AtomicU64::new(0))
+        });
+        let response = tokio::time::timeout(Duration::from_secs(1), receiver)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let data = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let sent: serde_json::Value = serde_json::from_slice(&data).unwrap();
+        assert_eq!(sent["action"], "pause");
+        let id = sent["id"].as_str().unwrap();
+        headers.insert("x-deskody-after", id.parse().unwrap());
+        bridge.lock().unwrap().accept(BrowserContext {
+            acknowledged: Some(id.into()),
+            music_playing: Some(false),
+            ..BrowserContext::default()
+        });
+        sender.await.unwrap().unwrap();
+        let receiver_bridge = bridge.clone();
+        let mut receiver = tokio::spawn(async move {
+            commands(State(receiver_bridge), headers)
+                .await
+                .into_response()
+        });
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), &mut receiver)
+                .await
+                .is_err()
+        );
+        bridge.lock().unwrap().set_enabled(false);
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), receiver)
+                .await
+                .unwrap()
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[test]
+    fn targeted_browser_metadata_does_not_query_native_players() {
+        struct Native;
+        impl crate::platform::Platform for Native {
+            fn context(&mut self, _: &Settings) -> Result<Context> {
+                unreachable!()
+            }
+            fn permissions(&self) -> Permissions {
+                unreachable!()
+            }
+            fn request_permission(&self, _: &str) -> Result<()> {
+                unreachable!()
+            }
+            fn players(&mut self, _: &Settings) -> Result<Vec<Player>> {
+                panic!("interactive YTM command must not query native apps")
+            }
+            fn play(&mut self, _: &str, _: Option<&str>) -> Result<()> {
+                unreachable!()
+            }
+            fn pause(&mut self, _: &str) -> Result<()> {
+                unreachable!()
+            }
+            fn volume(&mut self, _: &str, _: f64) -> Result<()> {
+                unreachable!()
+            }
+            fn media_key(&mut self) -> Result<()> {
+                unreachable!()
+            }
+        }
+        let bridge = Arc::new(Mutex::new(Bridge {
+            enabled: true,
+            ..Bridge::default()
+        }));
+        bridge.lock().unwrap().accept(BrowserContext {
+            music_playing: Some(false),
+            music: Some(Player {
+                track_id: "track-a".into(),
+                position: Some(118.0),
+                duration: Some(120.0),
+                ..Player::default()
+            }),
+            ..BrowserContext::default()
+        });
+        let mut adapter = WithBrowser {
+            native: Box::new(Native),
+            bridge,
+            cancel: Arc::new(AtomicU64::new(0)),
+        };
+        let settings = Settings {
+            provider: Provider::System,
+            target_player: "browser:music.youtube.com".into(),
+            ..Settings::default()
+        };
+        let player = crate::platform::Platform::selected_player(&mut adapter, &settings)
+            .unwrap()
+            .unwrap();
+        assert_eq!(player.track_id, "track-a");
+        assert_eq!(player.position, Some(118.0));
+    }
+
     #[test]
     fn open_command_carries_the_validated_target_and_waits_for_ack() {
         let bridge = Arc::new(Mutex::new(Bridge {

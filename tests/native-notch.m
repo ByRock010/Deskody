@@ -71,6 +71,16 @@ static NSPoint inside(void) {
 @end
 @implementation NotchTest
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
+    NSRect displays[] = { NSMakeRect(0,0,1280,800), NSMakeRect(0,0,1512,982), NSMakeRect(0,0,1728,1117),
+        NSMakeRect(-1920,0,1920,1080), NSMakeRect(0,982,2560,1440), NSMakeRect(1512,-1200,3840,2160) };
+    for (NSUInteger i=0; i<sizeof(displays)/sizeof(displays[0]); i++) {
+        NSRect frame = displays[i];
+        NSPoint edge = NSMakePoint(NSMidX(frame),NSMaxY(frame));
+        check(dnScreenContainsPointer(frame,edge)
+            && !dnScreenContainsPointer(frame,NSMakePoint(edge.x,edge.y+1))
+            && !dnScreenContainsPointer(frame,NSMakePoint(NSMinX(frame)-1,edge.y)),
+            [NSString stringWithFormat:@"top-edge hover respects display size and origin %@",NSStringFromRect(frame)]);
+    }
     self.foreground = NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier;
     if (self.expected) check(self.foreground == self.expected, @"external fullscreen fixture is active");
     check(self.foreground != NSProcessInfo.processInfo.processIdentifier, @"another app is active before notch launch");
@@ -89,7 +99,28 @@ static NSPoint inside(void) {
     fixture = [NSJSONSerialization JSONObjectWithData:[NSJSONSerialization dataWithJSONObject:data options:0 error:nil] options:NSJSONReadingMutableContainers error:nil];
     publish();
     check(deskody_notch_create(action), @"native notch created");
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 850*NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        if (self.expected) {
+            check(!notchHost.panel.onActiveSpace && !notchHost.globalMonitor && !notchHost.compactTimer && !notchHost.visualizing,
+                [NSString stringWithFormat:@"fullscreen is hidden by default with no mouse monitoring or animation (active=%d visible=%d monitor=%d timer=%d animation=%d)",
+                    notchHost.panel.onActiveSpace, notchHost.panel.visible, notchHost.globalMonitor != nil, notchHost.compactTimer != nil, notchHost.visualizing]);
+            DeskodyNotchPanel *old = notchHost.panel;
+            NSView *content = notchHost.root;
+            fixture[@"settings"][@"notchFullscreen"] = @YES;
+            [notchHost applySnapshot:fixture];
+            check(notchHost.panel != old && notchHost.panel.contentView == content,
+                @"fullscreen eligibility recreates the window while retaining media views");
+        } else if (!notchHost.panel.onActiveSpace) {
+            // The owner may already be using a fullscreen app when this test starts.
+            check(!notchHost.globalMonitor && !notchHost.compactTimer, @"current fullscreen Space hides legacy notch by default");
+            fixture[@"settings"][@"notchFullscreen"] = @YES;
+            [notchHost applySnapshot:fixture];
+        } else {
+            check(notchHost.panel.visible, @"legacy settings show on desktop Spaces by default");
+        }
+    });
     self.timer = [NSTimer scheduledTimerWithTimeInterval:.6 target:self selector:@selector(step:) userInfo:nil repeats:YES];
+    self.timer.fireDate = [NSDate dateWithTimeIntervalSinceNow:1.7];
 }
 - (void)step:(NSTimer *)timer {
     check(NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier == self.foreground,
@@ -101,9 +132,13 @@ static NSPoint inside(void) {
             check(!notchHost.expanded && notchHost.panel.ignoresMouseEvents && !notchHost.progressTimer, @"collapsed notch passes clicks through and has no fast timer");
             check(notchHost.globalMonitor && notchHost.localMonitor && notchHost.compactTimer, @"mouse-only observation installed without keyboard hooks");
             check(fabs(NSMidX(notchHost.panel.frame)-NSMidX(notchHost.screen.frame)) < .1, @"notch centered on its screen in points");
+            check(fabs(NSMaxY(notchHost.panel.frame)-NSMaxY(notchHost.screen.frame)) < .01,
+                @"panel reaches the physical screen top without menu-bar clamping");
+            check(![notchHost canHoverAt:NSMakePoint(NSMidX(notchHost.screen.frame), NSMaxY(notchHost.screen.frame)+1)],
+                @"pointer on adjacent display above cannot trigger hover");
             check(notchHost.body.frame.origin.y > notchHost.notchSize.height, @"expanded media stays below camera safe area");
             capture(@"/tmp/deskody-notch-compact.png");
-            move(NSMakePoint(NSMidX(notchHost.panel.frame),NSMaxY(notchHost.panel.frame)-notchHost.notchSize.height+2));
+            move(NSMakePoint(NSMidX(notchHost.screen.frame),NSMaxY(notchHost.screen.frame)));
             check(!notchHost.expanded, @"hover delay prevents accidental expansion");
             break;
         }
@@ -138,8 +173,36 @@ static NSPoint inside(void) {
             check([lastTransport[@"action"][@"kind"] isEqual:@"previous"], @"previous routes through shared transport");
             fixture[@"status"][@"player"][@"playing"] = @NO;
             [notchHost applySnapshot:fixture];
+            fixture[@"status"][@"player"][@"duration"] = @171.237097;
+            [notchHost applySnapshot:fixture];
+            check([notchHost.duration.stringValue isEqual:@"2:52"] && fabs(notchHost.seek.maxValue-171.187097)<.0001,
+                @"total time rounds up without extending the actual native seek range");
+            fixture[@"status"][@"player"][@"duration"] = @240.15;
+            fixture[@"status"][@"player"][@"displayDuration"] = @240;
+            [notchHost applySnapshot:fixture];
+            check([notchHost.duration.stringValue isEqual:@"4:00"] && fabs(notchHost.seek.maxValue-240.1)<.0001,
+                @"provider total label is separate from fractional seek duration");
+            [fixture[@"status"][@"player"] removeObjectForKey:@"displayDuration"];
+            fixture[@"status"][@"player"][@"duration"] = @212;
+            [notchHost applySnapshot:fixture];
+            notchHost.seek.dragDuration = 212;
+            notchHost.seek.dragging = YES;
+            notchHost.seek.doubleValue = 211;
+            fixture[@"status"][@"player"][@"duration"] = @999;
+            [notchHost seekChanged:notchHost.seek];
+            check(mediaCommands == 2 && [notchHost.elapsed.stringValue isEqual:@"3:31"] && [notchHost.duration.stringValue isEqual:@"3:32"],
+                @"near-end dragging previews stable elapsed/total labels without sending transport commands");
+            fixture[@"status"][@"player"][@"duration"] = @212;
+            notchHost.seek.dragging = NO;
             notchHost.seek.doubleValue = 75;
             [notchHost seekChanged:notchHost.seek];
+            fixture[@"status"][@"player"][@"position"] = @5;
+            [notchHost syncTimeline];
+            check([notchHost.elapsed.stringValue isEqual:@"1:15"], @"pending seek never snaps back to a stale snapshot");
+            fixture[@"status"][@"player"][@"position"] = @75;
+            fixture[@"status"][@"player"][@"sampledAt"] = @(NSDate.date.timeIntervalSince1970);
+            [notchHost syncTimeline];
+            check(!notchHost.pendingSeek, @"fresh seek acknowledgement releases the preview");
             break;
         case 4:
             check([lastTransport[@"action"][@"trackId"] isEqual:@"track-a"] && [lastTransport[@"action"][@"position"] doubleValue] == 75, @"seek carries captured track identity and seconds");
@@ -161,7 +224,8 @@ static NSPoint inside(void) {
             break;
         }
         case 7: {
-            check(notchHost.expanded, @"returning during close grace cancels dismissal");
+            check(notchHost.expanded, [NSString stringWithFormat:@"returning during close grace cancels dismissal (last=%@ actual=%@ frame=%@)",
+                NSStringFromPoint(notchHost.lastPointer), NSStringFromPoint(NSEvent.mouseLocation), NSStringFromRect(notchHost.panel.frame)]);
             NSPoint p = inside(); move(NSMakePoint(p.x+400,p.y-100));
             break;
         }
@@ -189,7 +253,9 @@ static NSPoint inside(void) {
             [notchHost applySnapshot:fixture];
             check(!notchHost.seek.enabled && !notchHost.next.enabled, @"unsupported controls disabled");
             [notchHost spaceChanged:nil];
-            check(!notchHost.expanded && notchHost.panel.onActiveSpace, @"Space changes collapse without moving applications");
+            check(notchHost.panel.onActiveSpace && notchHost.expanded == notchHost.showFullscreen,
+                @"fullscreen opt-in preserves the notch surface on Space changes; desktop-only mode collapses");
+            [notchHost setExpanded:NO animated:NO];
             break;
         case 11: {
             fixture[@"settings"][@"notchNowPlaying"] = @NO;
@@ -199,7 +265,7 @@ static NSPoint inside(void) {
             check(fabs(notchHost.closedRect.size.width-notchHost.notchSize.width)<.01 && notchHost.globalMonitor,
                 @"plain notch uses physical width and keeps hover monitoring");
             capture(@"/tmp/deskody-notch-plain.png");
-            move(NSMakePoint(NSMidX(notchHost.panel.frame),NSMaxY(notchHost.panel.frame)-notchHost.notchSize.height+2));
+            move(NSMakePoint(NSMidX(notchHost.screen.frame),NSMaxY(notchHost.screen.frame)));
             break;
         }
         case 12: {
@@ -226,6 +292,36 @@ static NSPoint inside(void) {
             [notchHost setExpanded:NO animated:NO];
             break;
         case 14: {
+            move(NSMakePoint(NSMidX(notchHost.screen.frame), NSMaxY(notchHost.screen.frame)));
+            [notchHost setExpanded:YES animated:NO];
+            [notchHost collapsePressed:nil];
+            [notchHost updatePointer:NSEvent.mouseLocation];
+            check(!notchHost.hoverTimer && !notchHost.expanded, @"explicit collapse stays closed while pointer remains in hover area");
+            fixture[@"settings"][@"notchFullscreen"] = @NO;
+            [notchHost applySnapshot:fixture];
+            break;
+        }
+        case 15: {
+            if (self.expected) {
+                check(!notchHost.panel.onActiveSpace && !notchHost.globalMonitor && !notchHost.compactTimer && !notchHost.progressTimer,
+                    @"disabling fullscreen visibility removes controls and observation immediately");
+                fixture[@"settings"][@"notchFullscreen"] = @YES;
+                [notchHost applySnapshot:fixture];
+            } else if (!notchHost.panel.onActiveSpace) {
+                check(!notchHost.globalMonitor && !notchHost.compactTimer, @"disabling fullscreen also hides the notch on the owner's fullscreen Space");
+                fixture[@"settings"][@"notchFullscreen"] = @YES;
+                [notchHost applySnapshot:fixture];
+            } else {
+                check(notchHost.panel.visible && notchHost.globalMonitor, @"fullscreen preference leaves desktop notch available");
+                move(NSMakePoint(NSMidX(notchHost.screen.frame), NSMinY(notchHost.screen.frame)+80));
+                move(NSMakePoint(NSMidX(notchHost.screen.frame), NSMaxY(notchHost.screen.frame)));
+                check(notchHost.hoverTimer != nil, @"leaving and returning rearms hover after explicit collapse");
+            }
+            break;
+        }
+        case 16: {
+            if (self.expected) check(notchHost.panel.onActiveSpace && notchHost.globalMonitor && notchHost.compactTimer,
+                @"fullscreen opt-in restores controls in place without changing focus");
             DeskodyNotchHost *host = notchHost;
             deskody_notch_destroy();
             check(!host.globalMonitor && !host.localMonitor && !host.compactTimer && !host.progressTimer && !host.panel.visible, @"teardown releases native resources");

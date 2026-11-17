@@ -107,8 +107,17 @@ async function panel(page: Page, count = 4) {
           if (cmd === "media_transport") {
             if ((window as any).trayTest.fail) throw new Error("Oynatıcı medya komutunu reddetti");
             const action = args.request.action;
-            if (action.kind === "seek") snapshot.status.player!.position = action.position;
+            const delay = (window as any).trayTest.transportDelay || 0;
+            if (delay) {
+              publish(); // An older status can arrive while the command is pending.
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+            if (action.kind === "seek") {
+              if (action.trackId !== snapshot.status.player!.trackId) throw new Error("Parça değişti; tekrar deneyin");
+              snapshot.status.player!.position = action.position;
+            }
             else snapshot.status.player!.trackId = "track-b";
+            snapshot.status.player!.sampledAt = Date.now() / 1000;
             publish();
           }
           if (cmd === "media_action") {
@@ -308,4 +317,74 @@ test("main player cancels a seek when the track changes during the gesture", asy
   expect(await page.evaluate(() => (window as any).trayTest.calls.filter((c:any) => c.cmd === "media_transport")[0].args.request.action.trackId)).toBe("new-track");
   await expect(page.getByRole("button", {name: "Müziği çal", exact: true})).toBeVisible();
   await page.screenshot({path: "test-results/media-main.png"});
+});
+
+
+test("near-end seek keeps its preview while an older paused snapshot arrives", async ({ page }) => {
+  await panel(page);
+  await page.evaluate(() => {
+    const state = (window as any).trayTest;
+    state.transportDelay = 1200;
+    state.snapshot.status.player.playing = false;
+    state.snapshot.status.player.position = 30;
+    state.publish();
+  });
+  const seek = page.getByRole("slider", { name: "Oynatma konumu", exact: true });
+  await expect(seek).toHaveValue("30");
+  await seek.press("End");
+  await expect(seek).toHaveValue("179.95");
+  await expect(page.locator(".media-times")).toContainText("2:59");
+  await expect(page.locator(".media-times")).toContainText("3:00");
+  await expect(seek).toBeDisabled();
+  await expect(seek).toBeEnabled();
+  await expect(seek).toHaveValue("179.95");
+  const calls = await page.evaluate(() => (window as any).trayTest.calls.filter((c: any) => c.cmd === "media_transport"));
+  expect(calls).toHaveLength(1);
+  expect(calls[0].args.request.action.trackId).toBe("track-a");
+});
+
+
+test("2:38 tail preview cannot leak into the next 3:58 song", async ({ page }) => {
+  await panel(page);
+  await page.evaluate(() => {
+    const state = (window as any).trayTest;
+    state.transportDelay = 1200;
+    Object.assign(state.snapshot.status.player, { playing: false, duration: 158, position: 30 });
+    state.publish();
+  });
+  const seek = page.getByRole("slider", { name: "Oynatma konumu", exact: true });
+  await expect(seek).toHaveValue("30");
+  await seek.fill("154");
+  await seek.press("Tab");
+  await expect(page.locator(".media-times")).toHaveText("2:342:38");
+  await page.evaluate(() => {
+    const state = (window as any).trayTest;
+    Object.assign(state.snapshot.status.player, { trackId: "track-b", track: "Next song", duration: 238, position: 1, sampledAt: Date.now()/1000 });
+    state.publish();
+  });
+  await expect(page.getByText("Next song", { exact: true })).toBeVisible();
+  await expect(page.locator(".media-times")).toHaveText("0:013:58");
+  await expect(page.getByRole("alert")).toContainText("Parça değişti");
+  await expect(seek).toHaveValue("1");
+  await expect(page.locator(".media-times")).toHaveText("0:013:58");
+});
+
+test("total label matches YTM rounding while the seek limit retains exact seconds", async ({ page }) => {
+  await panel(page);
+  await page.evaluate(() => {
+    const state = (window as any).trayTest;
+    Object.assign(state.snapshot.status.player, { playing: false, duration: 171.237097, position: 153 });
+    state.publish();
+  });
+  const seek = page.getByRole("slider", { name: "Oynatma konumu", exact: true });
+  await expect(seek).toHaveAttribute("aria-valuetext", "2:33 / 2:52");
+  await expect(page.locator(".media-times")).toHaveText("2:332:52");
+  expect(Number(await seek.getAttribute("max"))).toBeCloseTo(171.187097, 6);
+  await page.evaluate(() => {
+    const state = (window as any).trayTest;
+    Object.assign(state.snapshot.status.player, { duration: 240.15, displayDuration: 240 });
+    state.publish();
+  });
+  await expect(seek).toHaveAttribute("aria-valuetext", "2:33 / 4:00");
+  expect(Number(await seek.getAttribute("max"))).toBeCloseTo(240.1, 6);
 });

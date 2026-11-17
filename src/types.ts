@@ -25,6 +25,7 @@ export interface Settings {
   language: Language;
   notchEnabled: boolean;
   notchNowPlaying: boolean;
+  notchFullscreen: boolean;
   version: number;
   enabled: boolean;
   provider: Provider;
@@ -61,6 +62,7 @@ export interface Player {
   trackId?: string;
   artwork?: string | null;
   duration?: number | null;
+  displayDuration?: number | null;
   position?: number | null;
   sampledAt?: number | null;
   canSeek?: boolean;
